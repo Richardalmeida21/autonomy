@@ -57,13 +57,17 @@ export default function Home() {
   const [result, setResult] = useState<GeneratedPost | null>(null);
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     getSavedPosts()
-      .then(setSavedPosts)
+      .then((posts) => {
+        setSavedPosts(posts);
+        setLibraryError(null);
+      })
       .catch(() =>
-        setError("Nao foi possivel carregar a biblioteca de posts.")
+        setLibraryError("Nao foi possivel carregar a biblioteca de posts.")
       );
   }, []);
 
@@ -450,7 +454,11 @@ export default function Home() {
           </div>
 
           {activeView === "biblioteca" ? (
-            <SavedPostsLibrary posts={savedPosts} onDelete={deleteSavedPost} />
+            <SavedPostsLibrary
+              error={libraryError}
+              posts={savedPosts}
+              onDelete={deleteSavedPost}
+            />
           ) : isLoading ? (
             <LoadingPostState />
           ) : result ? (
@@ -476,12 +484,26 @@ export default function Home() {
 }
 
 function SavedPostsLibrary({
+  error,
   onDelete,
   posts
 }: {
+  error: string | null;
   onDelete: (id: string) => void | Promise<void>;
   posts: SavedPost[];
 }) {
+  if (error) {
+    return (
+      <div className="empty-state">
+        <div className="empty-icon">
+          <Sparkles size={30} />
+        </div>
+        <h3>Biblioteca indisponivel.</h3>
+        <p>{error}</p>
+      </div>
+    );
+  }
+
   if (posts.length === 0) {
     return (
       <div className="empty-state">
