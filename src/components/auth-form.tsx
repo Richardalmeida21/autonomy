@@ -10,6 +10,9 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedPlan = searchParams.get("plan") || "pro";
+  const [fullName, setFullName] = useState("");
+  const [document, setDocument] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +42,15 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
       const { error: signUpError } = await supabase.auth.signUp({
         email,
-        password
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            document,
+            phone,
+            plan: selectedPlan
+          }
+        }
       });
 
       if (signUpError) {
@@ -53,7 +64,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         },
         body: JSON.stringify({
           plan: selectedPlan,
-          email
+          email,
+          name: fullName,
+          document,
+          phone
         })
       });
       const checkout = await checkoutResponse.json();
@@ -90,6 +104,38 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             : "Crie sua conta e escolha seu plano."}
         </h1>
         <form className="form-stack" onSubmit={submit}>
+          {mode === "signup" && (
+            <>
+              <label>
+                <span>Nome completo</span>
+                <input
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                <span>CPF ou CNPJ</span>
+                <input
+                  inputMode="numeric"
+                  value={document}
+                  onChange={(event) => setDocument(event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                <span>Celular</span>
+                <input
+                  autoComplete="tel"
+                  inputMode="tel"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  required
+                />
+              </label>
+            </>
+          )}
           <label>
             <span>Email</span>
             <input

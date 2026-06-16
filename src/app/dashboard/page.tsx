@@ -1,30 +1,43 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
+  BarChart3,
   ChevronLeft,
   ChevronRight,
   Copy,
   Download,
   ImagePlus,
+  Library,
+  LogOut,
   Save,
   Sparkles,
   Trash2,
-  UploadCloud
+  UploadCloud,
+  User
 } from "lucide-react";
 import clsx from "clsx";
 import type { GeneratedPost } from "@/lib/post-schema";
+import { getPlan, plans } from "@/lib/plans";
 import {
   deletePost,
   getSavedPosts,
   savePost,
   type SavedPost
 } from "@/lib/saved-posts";
+import { getSupabaseClient } from "@/lib/supabase-client";
 
 type Mode = "criativo" | "contextual";
 type VisualFormat = "imagem_unica" | "carrossel";
-type ActiveView = "gerar" | "biblioteca";
+type ActiveView = "gerar" | "biblioteca" | "perfil" | "uso";
+type DashboardProfile = {
+  email: string;
+  name: string;
+  document: string;
+  phone: string;
+  plan: string;
+};
 
 const examples = {
   creative: {
@@ -56,11 +69,36 @@ export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [result, setResult] = useState<GeneratedPost | null>(null);
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
+  const [profile, setProfile] = useState<DashboardProfile>({
+    email: "",
+    name: "Usuario Autonomy",
+    document: "",
+    phone: "",
+    plan: "pro"
+  });
   const [error, setError] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    const supabase = getSupabaseClient();
+
+    supabase.auth.getUser().then(({ data }) => {
+      const user = data.user;
+
+      if (!user) {
+        return;
+      }
+
+      setProfile({
+        email: user.email || "",
+        name: String(user.user_metadata.full_name || "Usuario Autonomy"),
+        document: String(user.user_metadata.document || ""),
+        phone: String(user.user_metadata.phone || ""),
+        plan: String(user.user_metadata.plan || "pro")
+      });
+    });
+
     getSavedPosts()
       .then((posts) => {
         setSavedPosts(posts);
@@ -70,6 +108,15 @@ export default function Home() {
         setLibraryError("Nao foi possivel carregar a biblioteca de posts.")
       );
   }, []);
+
+  const activePlan = getPlan(profile.plan) || plans[1];
+  const usedCredits = savedPosts.reduce(
+    (total, savedPost) => total + getPostCreditCost(savedPost.post),
+    0
+  );
+  const creditLimit = activePlan.creditLimit;
+  const remainingCredits = Math.max(creditLimit - usedCredits, 0);
+  const usagePercent = Math.min(Math.round((usedCredits / creditLimit) * 100), 100);
 
   const payload = useMemo(() => {
     if (mode === "criativo") {
@@ -222,11 +269,93 @@ export default function Home() {
     }
   }
 
+  async function signOut() {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }
+
   return (
-    <main className="shell">
-      <section className="workspace">
-        <aside className="panel form-panel">
-          <div className="brand-row">
+    <main className="dashboard-shell">
+      <aside className="dashboard-sidebar">
+        <div className="brand-row">
+          <div className="brand-mark">
+            <Sparkles size={22} strokeWidth={2.4} />
+          </div>
+          <div>
+            <p className="eyebrow">Autonomy</p>
+            <h1>Dashboard</h1>
+          </div>
+        </div>
+
+        <div className="profile-summary">
+          <div className="profile-avatar">{getInitials(profile.name)}</div>
+          <div>
+            <strong>{profile.name}</strong>
+            <span>{profile.email || "Conta conectada"}</span>
+          </div>
+        </div>
+
+        <div className="sidebar-credits">
+          <div>
+            <span>Creditos</span>
+            <strong>{remainingCredits}</strong>
+          </div>
+          <div className="usage-bar">
+            <span style={{ width: `${usagePercent}%` }} />
+          </div>
+          <p>
+            {usedCredits} de {creditLimit} usados ({usagePercent}%)
+          </p>
+        </div>
+
+        <nav className="sidebar-nav" aria-label="Dashboard">
+          <button
+            className={clsx(activeView === "gerar" && "active")}
+            type="button"
+            onClick={() => setActiveView("gerar")}
+          >
+            <Sparkles size={18} />
+            Gerar post
+          </button>
+          <button
+            className={clsx(activeView === "biblioteca" && "active")}
+            type="button"
+            onClick={() => setActiveView("biblioteca")}
+          >
+            <Library size={18} />
+            Meus posts
+            <span>{savedPosts.length}</span>
+          </button>
+          <button
+            className={clsx(activeView === "uso" && "active")}
+            type="button"
+            onClick={() => setActiveView("uso")}
+          >
+            <BarChart3 size={18} />
+            Uso e creditos
+          </button>
+          <button
+            className={clsx(activeView === "perfil" && "active")}
+            type="button"
+            onClick={() => setActiveView("perfil")}
+          >
+            <User size={18} />
+            Perfil
+          </button>
+        </nav>
+
+        <button className="signout-button" type="button" onClick={signOut}>
+          <LogOut size={18} />
+          Sair
+        </button>
+      </aside>
+
+      <section className="dashboard-main">
+        {activeView === "gerar" && (
+          <section className="workspace">
+            <aside className="panel form-panel">
+              <div className="brand-row compact-brand">
             <div className="brand-mark">
               <Sparkles size={22} strokeWidth={2.4} />
             </div>
@@ -234,24 +363,6 @@ export default function Home() {
               <p className="eyebrow">Autonomy</p>
               <h1>Gerador de posts pronto para vender</h1>
             </div>
-          </div>
-
-          <div className="view-tabs" aria-label="Navegacao">
-            <button
-              className={clsx(activeView === "gerar" && "active")}
-              type="button"
-              onClick={() => setActiveView("gerar")}
-            >
-              Gerar
-            </button>
-            <button
-              className={clsx(activeView === "biblioteca" && "active")}
-              type="button"
-              onClick={() => setActiveView("biblioteca")}
-            >
-              Meus posts
-              <span>{savedPosts.length}</span>
-            </button>
           </div>
 
           <div className="mode-switch" aria-label="Modo de geracao">
@@ -417,19 +528,14 @@ export default function Home() {
               </button>
             </div>
           </form>
-        </aside>
+            </aside>
 
-        <section className="results-area">
+            <section className="results-area">
           <div className="topbar">
             <div>
               <p className="eyebrow">Saida estruturada</p>
-              <h2>
-                {activeView === "biblioteca"
-                  ? "Meus posts salvos"
-                  : "Post completo pronto para o calendario"}
-              </h2>
+              <h2>Post completo pronto para o calendario</h2>
             </div>
-            {activeView === "gerar" && (
               <div className="topbar-actions">
                 <button
                   className="save-button"
@@ -450,16 +556,9 @@ export default function Home() {
                   Descartar
                 </button>
               </div>
-            )}
           </div>
 
-          {activeView === "biblioteca" ? (
-            <SavedPostsLibrary
-              error={libraryError}
-              posts={savedPosts}
-              onDelete={deleteSavedPost}
-            />
-          ) : isLoading ? (
+          {isLoading ? (
             <LoadingPostState />
           ) : result ? (
             <div className="cards-grid single-card">
@@ -477,7 +576,33 @@ export default function Home() {
               </p>
             </div>
           )}
-        </section>
+            </section>
+          </section>
+        )}
+
+        {activeView === "biblioteca" && (
+          <DashboardSection eyebrow="Biblioteca" title="Meus posts salvos">
+            <SavedPostsLibrary
+              error={libraryError}
+              posts={savedPosts}
+              onDelete={deleteSavedPost}
+            />
+          </DashboardSection>
+        )}
+
+        {activeView === "uso" && (
+          <UsagePanel
+            creditLimit={creditLimit}
+            remainingCredits={remainingCredits}
+            savedPosts={savedPosts}
+            usedCredits={usedCredits}
+            usagePercent={usagePercent}
+          />
+        )}
+
+        {activeView === "perfil" && (
+          <ProfilePanel planName={activePlan.name} profile={profile} />
+        )}
       </section>
     </main>
   );
@@ -537,6 +662,126 @@ function SavedPostsLibrary({
   );
 }
 
+function DashboardSection({
+  children,
+  eyebrow,
+  title
+}: {
+  children: ReactNode;
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <section className="dashboard-section">
+      <div className="topbar">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function UsagePanel({
+  creditLimit,
+  remainingCredits,
+  savedPosts,
+  usedCredits,
+  usagePercent
+}: {
+  creditLimit: number;
+  remainingCredits: number;
+  savedPosts: SavedPost[];
+  usedCredits: number;
+  usagePercent: number;
+}) {
+  return (
+    <DashboardSection eyebrow="Uso" title="Creditos e consumo">
+      <div className="metrics-grid">
+        <div className="metric-card">
+          <span>Creditos totais</span>
+          <strong>{creditLimit}</strong>
+        </div>
+        <div className="metric-card">
+          <span>Usados</span>
+          <strong>{usedCredits}</strong>
+        </div>
+        <div className="metric-card">
+          <span>Restantes</span>
+          <strong>{remainingCredits}</strong>
+        </div>
+      </div>
+
+      <div className="usage-panel">
+        <div className="usage-panel-header">
+          <div>
+            <p className="eyebrow">Progresso mensal</p>
+            <h3>{usagePercent}% dos creditos usados</h3>
+          </div>
+          <strong>
+            {usedCredits}/{creditLimit}
+          </strong>
+        </div>
+        <div className="usage-bar large">
+          <span style={{ width: `${usagePercent}%` }} />
+        </div>
+        <p>
+          O calculo atual considera os posts salvos na biblioteca. Quando
+          ativarmos controle de assinatura, o uso sera registrado por geracao.
+        </p>
+      </div>
+
+      <div className="usage-panel">
+        <div className="usage-panel-header">
+          <div>
+            <p className="eyebrow">Atividade</p>
+            <h3>{savedPosts.length} posts salvos</h3>
+          </div>
+        </div>
+      </div>
+    </DashboardSection>
+  );
+}
+
+function ProfilePanel({
+  planName,
+  profile
+}: {
+  planName: string;
+  profile: DashboardProfile;
+}) {
+  return (
+    <DashboardSection eyebrow="Perfil" title="Dados da conta">
+      <div className="profile-grid">
+        <div className="profile-card">
+          <div className="profile-avatar large">{getInitials(profile.name)}</div>
+          <h3>{profile.name}</h3>
+          <p>{profile.email}</p>
+          <span>Plano {planName}</span>
+        </div>
+        <div className="profile-details">
+          <InfoRow label="Nome" value={profile.name} />
+          <InfoRow label="Email" value={profile.email} />
+          <InfoRow label="CPF/CNPJ" value={profile.document || "Nao informado"} />
+          <InfoRow label="Celular" value={profile.phone || "Nao informado"} />
+          <InfoRow label="Plano" value={planName} />
+        </div>
+      </div>
+    </DashboardSection>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="info-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function LoadingPostState() {
   return (
     <div className="loading-state" role="status" aria-live="polite">
@@ -554,6 +799,19 @@ function LoadingPostState() {
       </div>
     </div>
   );
+}
+
+function getInitials(name: string) {
+  const [first = "U", second = "A"] = name.trim().split(/\s+/);
+  return `${first[0] || "U"}${second[0] || ""}`.toUpperCase();
+}
+
+function getPostCreditCost(post: GeneratedPost["post"]) {
+  if (post.generated_images.length > 0) {
+    return post.generated_images.length;
+  }
+
+  return post.generated_image ? 1 : 0;
 }
 
 function PostCard({

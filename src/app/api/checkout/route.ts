@@ -5,7 +5,10 @@ import { getStripe } from "@/lib/stripe";
 
 const checkoutSchema = z.object({
   plan: z.string(),
-  email: z.string().email()
+  email: z.string().email(),
+  name: z.string().optional(),
+  document: z.string().optional(),
+  phone: z.string().optional()
 });
 
 export const runtime = "nodejs";
@@ -46,6 +49,7 @@ export async function POST(request: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer_email: parsedCheckout.data.email,
+      customer_creation: "always",
       line_items: [
         {
           price: priceId,
@@ -53,7 +57,10 @@ export async function POST(request: Request) {
         }
       ],
       metadata: {
-        plan: plan.id
+        plan: plan.id,
+        name: parsedCheckout.data.name || "",
+        document: parsedCheckout.data.document || "",
+        phone: parsedCheckout.data.phone || ""
       },
       success_url: `${origin}/sucesso?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/cancelado`
