@@ -30,6 +30,13 @@ cp .env.example .env
 OPENAI_API_KEY=sk-proj...
 OPENAI_MODEL=gpt-5.4-mini
 OPENAI_IMAGE_MODEL=gpt-image-2
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PRICE_STARTER=price_...
+STRIPE_PRICE_PRO=price_...
+STRIPE_PRICE_AGENCY=price_...
 ```
 
 4. Rode:
@@ -39,6 +46,15 @@ npm run dev
 ```
 
 Abra `http://localhost:3000`.
+
+## Rotas principais
+
+- `/` -> landing page com planos
+- `/cadastro` -> cadastro e checkout
+- `/login` -> login
+- `/dashboard` -> gerador de posts
+- `/sucesso` -> retorno de checkout aprovado
+- `/cancelado` -> checkout cancelado
 
 ## Como funciona
 
