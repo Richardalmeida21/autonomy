@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { saveProfile } from "@/lib/profile-client";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import logoImg from "@/images/logo_autonomy.png";
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
@@ -15,7 +17,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [fullName, setFullName] = useState("");
   const [document, setDocument] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -113,10 +115,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     <main className="auth-page">
       <section className="auth-card">
         <Link className="auth-logo" href="/">
-          <span>
-            <Sparkles size={21} />
-          </span>
-          Autonomy
+          <Image src={logoImg} alt="Autonomy Logo" height={32} className="logo-img" />
         </Link>
         <p className="eyebrow">{mode === "login" ? "Entrar" : "Criar conta"}</p>
         <h1>

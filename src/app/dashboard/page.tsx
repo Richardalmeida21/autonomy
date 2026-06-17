@@ -19,6 +19,8 @@ import {
   User
 } from "lucide-react";
 import clsx from "clsx";
+import Image from "next/image";
+import logoImg from "@/images/logo_autonomy.png";
 import type { GeneratedPost } from "@/lib/post-schema";
 import { getPlan, plans } from "@/lib/plans";
 import { getProfile } from "@/lib/profile-client";
@@ -317,13 +319,13 @@ export default function Home() {
     <main className="dashboard-shell">
       <aside className="dashboard-sidebar">
         <div className="brand-row">
-          <div className="brand-mark">
-            <Sparkles size={22} strokeWidth={2.4} />
-          </div>
-          <div>
-            <p className="eyebrow">Autonomy</p>
-            <h1>Dashboard</h1>
-          </div>
+          <Image 
+            src={logoImg} 
+            alt="Autonomy Logo" 
+            height={32} 
+            priority
+            style={{ width: "auto", height: "32px", objectFit: "contain" }}
+          />
         </div>
 
         <div className="profile-summary">
@@ -393,15 +395,15 @@ export default function Home() {
         {activeView === "gerar" && (
           <section className="workspace">
             <aside className="panel form-panel">
-              <div className="brand-row compact-brand">
-            <div className="brand-mark">
-              <Sparkles size={22} strokeWidth={2.4} />
-            </div>
-            <div>
-              <p className="eyebrow">Autonomy</p>
-              <h1>Gerador de posts pronto para vender</h1>
-            </div>
-          </div>
+              <div className="form-header">
+                <Image 
+                  src={logoImg} 
+                  alt="Autonomy Logo" 
+                  height={24} 
+                  style={{ width: "auto", height: "24px", objectFit: "contain", marginBottom: "4px" }}
+                />
+                <h1 className="form-title">Gerador de posts pronto para vender</h1>
+              </div>
 
           <div className="mode-switch" aria-label="Modo de geracao">
             <button
