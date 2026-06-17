@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDatabase } from "@/lib/db";
+import { publishInstagramMedia, type SocialAccountRecord } from "@/lib/meta";
 import { uploadPostImages } from "@/lib/post-images";
 import { generatedPostZodSchema } from "@/lib/post-schema";
 import { getUserFromRequest } from "@/lib/supabase-server";
@@ -8,11 +9,13 @@ import { getUserFromRequest } from "@/lib/supabase-server";
 const scheduleInputSchema = z.object({
   savedPostId: z.string().uuid().optional(),
   socialAccountId: z.string().uuid(),
-  scheduledFor: z.string().datetime(),
+  scheduledFor: z.string().datetime().optional(),
+  publishNow: z.boolean().optional().default(false),
   post: generatedPostZodSchema
 });
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   try {
@@ -74,18 +77,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const scheduledFor = new Date(parsedInput.data.scheduledFor);
+    const scheduledFor = parsedInput.data.publishNow
+      ? new Date()
+      : parsedInput.data.scheduledFor
+        ? new Date(parsedInput.data.scheduledFor)
+        : null;
 
-    if (scheduledFor.getTime() < Date.now() + 60 * 1000) {
+    if (!scheduledFor || Number.isNaN(scheduledFor.getTime())) {
       return NextResponse.json(
-        { error: "Escolha um horario pelo menos 1 minuto no futuro." },
+        { error: "Escolha data e horario para publicar." },
+        { status: 400 }
+      );
+    }
+
+    if (!parsedInput.data.publishNow && scheduledFor.getTime() < Date.now() - 60 * 1000) {
+      return NextResponse.json(
+        { error: "Escolha um horario atual ou futuro." },
         { status: 400 }
       );
     }
 
     const database = getDatabase();
     const account = await database.query(
-      `select id
+      `select id, auth_flow, instagram_business_account_id, access_token_encrypted
        from social_accounts
        where id = $1 and user_id = $2 and status = 'connected'`,
       [parsedInput.data.socialAccountId, user.id]
@@ -124,7 +138,7 @@ export async function POST(request: Request) {
          id, user_id, saved_post_id, social_account_id, caption, media_urls,
          original_payload, scheduled_for, status
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')`,
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         scheduleId,
         user.id,
@@ -133,9 +147,51 @@ export async function POST(request: Request) {
         parsedInput.data.post.post.caption,
         JSON.stringify(mediaUrls),
         parsedInput.data.post,
-        scheduledFor.toISOString()
+        scheduledFor.toISOString(),
+        parsedInput.data.publishNow ? "publishing" : "pending"
       ]
     );
+
+    if (parsedInput.data.publishNow) {
+      try {
+        const publishResult = await publishInstagramMedia({
+          account: account.rows[0] as SocialAccountRecord,
+          caption: parsedInput.data.post.post.caption,
+          mediaUrls
+        });
+
+        await database.query(
+          `update scheduled_posts
+           set status = 'published',
+               provider_media_id = $2,
+               error_message = null
+           where id = $1`,
+          [scheduleId, publishResult.id]
+        );
+
+        return NextResponse.json({
+          id: scheduleId,
+          ok: true,
+          providerMediaId: publishResult.id,
+          status: "published"
+        });
+      } catch (publishError) {
+        const message =
+          publishError instanceof Error
+            ? publishError.message
+            : "Falha ao publicar post.";
+
+        await database.query(
+          `update scheduled_posts
+           set status = 'failed',
+               error_message = $2
+           where id = $1`,
+          [scheduleId, message]
+        );
+
+        return NextResponse.json({ error: message, id: scheduleId }, { status: 502 });
+      }
+    }
 
     return NextResponse.json({ id: scheduleId, ok: true });
   } catch (error) {

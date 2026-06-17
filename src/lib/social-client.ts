@@ -79,13 +79,15 @@ export async function getScheduledPosts() {
 
 export async function schedulePost({
   post,
+  publishNow = false,
   savedPostId,
   scheduledFor,
   socialAccountId
 }: {
   post: GeneratedPost;
+  publishNow?: boolean;
   savedPostId?: string;
-  scheduledFor: string;
+  scheduledFor?: string;
   socialAccountId: string;
 }) {
   const headers = await getAuthHeaders();
@@ -97,6 +99,7 @@ export async function schedulePost({
     },
     body: JSON.stringify({
       post,
+      publishNow,
       savedPostId,
       scheduledFor,
       socialAccountId

@@ -13,10 +13,10 @@ import {
   Library,
   LogOut,
   Plug,
-  Save,
   Send,
   ShieldCheck,
   Sparkles,
+  Star,
   Trash2,
   UploadCloud,
   User
@@ -31,6 +31,7 @@ import {
   deletePost,
   getSavedPosts,
   savePost,
+  updatePostFavorite,
   type SavedPost
 } from "@/lib/saved-posts";
 import {
@@ -106,6 +107,7 @@ export default function Home() {
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPublishingNow, setIsPublishingNow] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
 
   useEffect(() => {
@@ -254,6 +256,7 @@ export default function Home() {
       }
 
       setResult(data);
+      await persistGeneratedPost(data);
       setActiveView("gerar");
       await refreshUsageSummary();
     } catch (caughtError) {
@@ -324,28 +327,16 @@ export default function Home() {
     );
   }
 
-  async function saveCurrentPost() {
-    if (!result) {
-      return;
-    }
-
+  async function persistGeneratedPost(generatedPost: GeneratedPost) {
     const savedPost: SavedPost = {
-      ...result,
+      ...generatedPost,
       id: crypto.randomUUID(),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      isFavorite: false
     };
 
-    try {
-      await savePost(savedPost);
-      setSavedPosts([savedPost, ...savedPosts]);
-      setActiveView("biblioteca");
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Nao foi possivel salvar este post na biblioteca."
-      );
-    }
+    await savePost(savedPost);
+    setSavedPosts((current) => [savedPost, ...current]);
   }
 
   async function connectInstagram() {
@@ -399,6 +390,85 @@ export default function Home() {
     }
   }
 
+  async function publishCurrentPostNow() {
+    if (!result) {
+      return;
+    }
+
+    setScheduleError(null);
+    setScheduleMessage(null);
+    setIsPublishingNow(true);
+
+    try {
+      if (!selectedSocialAccountId) {
+        throw new Error("Conecte e selecione uma conta do Instagram.");
+      }
+
+      await schedulePost({
+        post: result,
+        publishNow: true,
+        socialAccountId: selectedSocialAccountId
+      });
+      await refreshSocialData();
+      setScheduleMessage("Post publicado no Instagram.");
+      setActiveView("agenda");
+    } catch (caughtError) {
+      setScheduleError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Nao foi possivel publicar este post agora."
+      );
+    } finally {
+      setIsPublishingNow(false);
+    }
+  }
+
+  async function scheduleSavedPost(post: SavedPost, socialAccountId: string, dateTime: string) {
+    setScheduleError(null);
+    setScheduleMessage(null);
+
+    try {
+      await schedulePost({
+        post,
+        savedPostId: post.id,
+        scheduledFor: new Date(dateTime).toISOString(),
+        socialAccountId
+      });
+      await refreshSocialData();
+      setScheduleMessage("Post agendado com sucesso.");
+      setActiveView("agenda");
+    } catch (caughtError) {
+      setScheduleError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Nao foi possivel agendar este post."
+      );
+    }
+  }
+
+  async function publishSavedPostNow(post: SavedPost, socialAccountId: string) {
+    setScheduleError(null);
+    setScheduleMessage(null);
+
+    try {
+      await schedulePost({
+        post,
+        publishNow: true,
+        savedPostId: post.id,
+        socialAccountId
+      });
+      await refreshSocialData();
+      setScheduleMessage("Post publicado no Instagram.");
+      setActiveView("agenda");
+    } catch (caughtError) {
+      setScheduleError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Nao foi possivel publicar este post agora."
+      );
+    }
+  }
+
   async function removeSocialAccount(id: string) {
     try {
       await disconnectSocialAccount(id);
@@ -428,6 +498,22 @@ export default function Home() {
       setSavedPosts(savedPosts.filter((post) => post.id !== id));
     } catch {
       setError("Nao foi possivel remover este post da biblioteca.");
+    }
+  }
+
+  async function toggleSavedPostFavorite(id: string, isFavorite: boolean) {
+    const previousPosts = savedPosts;
+    const nextPosts = savedPosts
+      .map((post) => (post.id === id ? { ...post, isFavorite } : post))
+      .sort(sortSavedPosts);
+
+    setSavedPosts(nextPosts);
+
+    try {
+      await updatePostFavorite(id, isFavorite);
+    } catch {
+      setSavedPosts(previousPosts);
+      setError("Nao foi possivel atualizar o favorito.");
     }
   }
 
@@ -743,22 +829,28 @@ export default function Home() {
                       className="schedule-button"
                       type="button"
                       onClick={scheduleCurrentPost}
-                      disabled={isScheduling || !result}
+                      disabled={isScheduling || isPublishingNow || !result}
                     >
                       <Send size={16} />
                       Agendar
                     </button>
+                    <button
+                      className="schedule-button now"
+                      type="button"
+                      onClick={publishCurrentPostNow}
+                      disabled={isScheduling || isPublishingNow || !result}
+                    >
+                      <Send size={16} />
+                      {isPublishingNow ? "Publicando" : "Publicar agora"}
+                    </button>
                   </div>
                 )}
-                <button
-                  className="save-button"
-                  type="button"
-                  onClick={saveCurrentPost}
-                  disabled={!result || isLoading}
-                >
-                  <Save size={16} />
-                  Salvar post
-                </button>
+                {result && (
+                  <span className="autosave-pill">
+                    <Library size={16} />
+                    Salvo automaticamente
+                  </span>
+                )}
                 <button
                   className="discard-button"
                   type="button"
@@ -800,7 +892,11 @@ export default function Home() {
           <DashboardSection eyebrow="Biblioteca" title="Meus posts salvos">
             <SavedPostsLibrary
               error={libraryError}
+              onFavorite={toggleSavedPostFavorite}
+              onPublishNow={publishSavedPostNow}
+              onSchedule={scheduleSavedPost}
               posts={savedPosts}
+              socialAccounts={socialAccounts}
               onDelete={deleteSavedPost}
             />
           </DashboardSection>
@@ -847,10 +943,22 @@ export default function Home() {
 function SavedPostsLibrary({
   error,
   onDelete,
+  onFavorite,
+  onPublishNow,
+  onSchedule,
+  socialAccounts,
   posts
 }: {
   error: string | null;
   onDelete: (id: string) => void | Promise<void>;
+  onFavorite: (id: string, isFavorite: boolean) => void | Promise<void>;
+  onPublishNow: (post: SavedPost, socialAccountId: string) => void | Promise<void>;
+  onSchedule: (
+    post: SavedPost,
+    socialAccountId: string,
+    dateTime: string
+  ) => void | Promise<void>;
+  socialAccounts: SocialAccount[];
   posts: SavedPost[];
 }) {
   if (error) {
@@ -867,12 +975,12 @@ function SavedPostsLibrary({
 
   if (posts.length === 0) {
     return (
-      <div className="empty-state">
-        <div className="empty-icon">
-          <Sparkles size={30} />
-        </div>
-        <h3>Nenhum post salvo ainda.</h3>
-        <p>Quando gostar de uma geracao, clique em salvar para guardar aqui.</p>
+        <div className="empty-state">
+          <div className="empty-icon">
+            <Sparkles size={30} />
+          </div>
+        <h3>Nenhum post gerado ainda.</h3>
+        <p>Todo post gerado aparece aqui automaticamente.</p>
       </div>
     );
   }
@@ -886,14 +994,115 @@ function SavedPostsLibrary({
               <p className="eyebrow">{savedPost.nicho}</p>
               <h3>{savedPost.post.headline_da_imagem}</h3>
             </div>
-            <button type="button" onClick={() => onDelete(savedPost.id)}>
-              <Trash2 size={16} />
-              Remover
-            </button>
+            <div className="library-actions">
+              <button
+                className={clsx(savedPost.isFavorite && "active")}
+                type="button"
+                onClick={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
+              >
+                <Star size={16} />
+                {savedPost.isFavorite ? "Favorito" : "Favoritar"}
+              </button>
+              <button type="button" onClick={() => onDelete(savedPost.id)}>
+                <Trash2 size={16} />
+                Remover
+              </button>
+            </div>
           </div>
           <PostCard label="Post salvo" option={savedPost.post} />
+          <SavedPostScheduler
+            post={savedPost}
+            socialAccounts={socialAccounts}
+            onPublishNow={onPublishNow}
+            onSchedule={onSchedule}
+          />
         </div>
       ))}
+    </div>
+  );
+}
+
+function SavedPostScheduler({
+  onPublishNow,
+  onSchedule,
+  post,
+  socialAccounts
+}: {
+  onPublishNow: (post: SavedPost, socialAccountId: string) => void | Promise<void>;
+  onSchedule: (
+    post: SavedPost,
+    socialAccountId: string,
+    dateTime: string
+  ) => void | Promise<void>;
+  post: SavedPost;
+  socialAccounts: SocialAccount[];
+}) {
+  const [dateTime, setDateTime] = useState("");
+  const [socialAccountId, setSocialAccountId] = useState(
+    socialAccounts[0]?.id || ""
+  );
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSocialAccountId((current) => current || socialAccounts[0]?.id || "");
+  }, [socialAccounts]);
+
+  async function schedule() {
+    setMessage(null);
+
+    if (!socialAccountId) {
+      setMessage("Conecte uma conta do Instagram.");
+      return;
+    }
+
+    if (!dateTime) {
+      setMessage("Escolha data e horario.");
+      return;
+    }
+
+    await onSchedule(post, socialAccountId, dateTime);
+  }
+
+  async function publishNow() {
+    setMessage(null);
+
+    if (!socialAccountId) {
+      setMessage("Conecte uma conta do Instagram.");
+      return;
+    }
+
+    await onPublishNow(post, socialAccountId);
+  }
+
+  return (
+    <div className="saved-post-scheduler">
+      <select
+        aria-label="Conta do Instagram"
+        value={socialAccountId}
+        onChange={(event) => setSocialAccountId(event.target.value)}
+      >
+        <option value="">Conta Instagram</option>
+        {socialAccounts.map((account) => (
+          <option key={account.id} value={account.id}>
+            @{account.instagram_username || account.page_name || "instagram"}
+          </option>
+        ))}
+      </select>
+      <input
+        aria-label="Data e horario"
+        type="datetime-local"
+        value={dateTime}
+        onChange={(event) => setDateTime(event.target.value)}
+      />
+      <button type="button" onClick={schedule}>
+        <CalendarClock size={16} />
+        Agendar
+      </button>
+      <button className="now" type="button" onClick={publishNow}>
+        <Send size={16} />
+        Publicar agora
+      </button>
+      {message && <span>{message}</span>}
     </div>
   );
 }
@@ -1240,6 +1449,17 @@ function LoadingPostState() {
 function getInitials(name: string) {
   const [first = "U", second = "A"] = name.trim().split(/\s+/);
   return `${first[0] || "U"}${second[0] || ""}`.toUpperCase();
+}
+
+function sortSavedPosts(firstPost: SavedPost, secondPost: SavedPost) {
+  if (Boolean(firstPost.isFavorite) !== Boolean(secondPost.isFavorite)) {
+    return firstPost.isFavorite ? -1 : 1;
+  }
+
+  return (
+    new Date(secondPost.createdAt).getTime() -
+    new Date(firstPost.createdAt).getTime()
+  );
 }
 
 function PostCard({

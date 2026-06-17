@@ -2,11 +2,15 @@ create table if not exists saved_posts (
   id uuid primary key,
   user_id uuid references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
+  is_favorite boolean not null default false,
   payload jsonb not null
 );
 
 alter table saved_posts
   add column if not exists user_id uuid references auth.users(id) on delete cascade;
+
+alter table saved_posts
+  add column if not exists is_favorite boolean not null default false;
 
 create index if not exists saved_posts_created_at_idx
   on saved_posts (created_at desc);

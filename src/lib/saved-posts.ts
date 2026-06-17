@@ -4,6 +4,7 @@ import { getSupabaseClient } from "@/lib/supabase-client";
 export type SavedPost = GeneratedPost & {
   id: string;
   createdAt: string;
+  isFavorite?: boolean;
 };
 
 export async function getSavedPosts() {
@@ -45,6 +46,23 @@ export async function deletePost(id: string) {
 
   if (!response.ok) {
     throw new Error(data.error || "Nao foi possivel remover o post.");
+  }
+}
+
+export async function updatePostFavorite(id: string, isFavorite: boolean) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`/api/posts/${id}`, {
+    method: "PATCH",
+    headers: {
+      ...headers,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ isFavorite })
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Nao foi possivel favoritar o post.");
   }
 }
 
