@@ -39,6 +39,13 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_STARTER=price_...
 STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_AGENCY=price_...
+META_APP_ID=...
+META_APP_SECRET=...
+META_REDIRECT_URI=https://useautonomy.com.br/api/meta/oauth/callback
+META_GRAPH_VERSION=v23.0
+SOCIAL_TOKEN_ENCRYPTION_KEY=base64_com_32_bytes
+SUPABASE_POST_IMAGES_BUCKET=post-images
+CRON_SECRET=senha_aleatoria_com_16_ou_mais_caracteres
 ```
 
 4. Rode:
@@ -58,6 +65,9 @@ Abra `http://localhost:3000`.
 - `/sucesso` -> retorno de checkout aprovado
 - `/cancelado` -> checkout cancelado
 - `/api/stripe/webhook` -> webhook da Stripe para atualizar assinatura
+- `/api/meta/oauth/start` -> inicia conexao Facebook/Instagram
+- `/api/meta/oauth/callback` -> callback OAuth da Meta
+- `/api/cron/publish-scheduled` -> publica posts agendados
 
 ## Como funciona
 
@@ -166,6 +176,40 @@ Eventos recomendados:
 - `customer.subscription.deleted`
 
 Copie o `Signing secret` do webhook para `STRIPE_WEBHOOK_SECRET` na Vercel.
+
+## Publicacao automatica no Instagram
+
+O Autonomy usa a Instagram Graph API oficial. O fluxo implementado e:
+
+1. Usuario conecta Facebook/Instagram pelo OAuth da Meta.
+2. O backend salva o Page Access Token criptografado em `social_accounts`.
+3. Ao agendar, as imagens base64 sao enviadas para o bucket publico `post-images` no Supabase Storage.
+4. O post entra em `scheduled_posts` com status `pending`.
+5. A Vercel Cron chama `/api/cron/publish-scheduled` a cada 5 minutos.
+6. O backend cria o media container no Instagram, espera ficar pronto e publica.
+
+No painel da Meta, configure o OAuth redirect URI:
+
+```bash
+https://useautonomy.com.br/api/meta/oauth/callback
+```
+
+Permissoes usadas:
+
+- `pages_show_list`
+- `pages_read_engagement`
+- `instagram_basic`
+- `instagram_content_publish`
+
+Para gerar `SOCIAL_TOKEN_ENCRYPTION_KEY` localmente:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Na Vercel, adicione `CRON_SECRET`. A Vercel envia esse valor automaticamente no header `Authorization` quando chama o cron.
+
+Observacao: a conta do Instagram precisa ser profissional (Business ou Creator) e vinculada a uma Pagina do Facebook administrada pelo usuario.
 
 ## Referencias oficiais usadas
 

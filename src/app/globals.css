@@ -2139,6 +2139,33 @@ textarea:focus {
   gap: 8px;
 }
 
+.schedule-inline {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #F8F9FA;
+}
+
+.schedule-inline select,
+.schedule-inline input {
+  width: auto;
+  min-height: 34px;
+  border-radius: 7px;
+  background: #ffffff;
+  font-size: 0.8rem;
+}
+
+.schedule-inline select {
+  min-width: 170px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 0 10px;
+}
+
 .topbar-actions button,
 .library-item-header button {
   display: inline-flex;
@@ -2158,6 +2185,17 @@ textarea:focus {
   color: #ffffff;
   background: var(--success);
   box-shadow: 0 2px 6px rgba(16, 185, 129, 0.15);
+}
+
+.schedule-button {
+  color: #ffffff;
+  background: var(--accent);
+  box-shadow: 0 2px 6px rgba(0, 82, 255, 0.15);
+}
+
+.schedule-button:hover {
+  background: var(--accent-dark);
+  transform: translateY(-1px);
 }
 
 .save-button:hover {
@@ -2243,6 +2281,159 @@ textarea:focus {
 .library-list {
   display: grid;
   gap: 20px;
+}
+
+.social-panel,
+.schedule-list {
+  display: grid;
+  gap: 16px;
+}
+
+.integration-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.integration-header h3,
+.integration-header p {
+  margin: 0;
+}
+
+.integration-header h3 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.15rem;
+}
+
+.integration-header p {
+  max-width: 640px;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.account-list {
+  display: grid;
+  gap: 10px;
+}
+
+.account-item,
+.schedule-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.01);
+}
+
+.account-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+}
+
+.account-item strong,
+.account-item span {
+  display: block;
+}
+
+.account-item strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.account-item > div span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.account-item button,
+.schedule-item button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.06);
+  font-weight: 650;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--success);
+  background: rgba(16, 185, 129, 0.08);
+  font-size: 0.76rem;
+  font-weight: 750;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.status-pill.pending,
+.status-pill.publishing {
+  color: var(--accent);
+  background: rgba(0, 82, 255, 0.08);
+}
+
+.status-pill.failed,
+.status-pill.canceled {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.schedule-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 16px;
+}
+
+.schedule-item h3,
+.schedule-item p {
+  margin: 0;
+}
+
+.schedule-item h3 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.08rem;
+}
+
+.schedule-item p:not(.eyebrow) {
+  display: -webkit-box;
+  max-width: 760px;
+  margin-top: 8px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.schedule-item span:not(.status-pill) {
+  display: block;
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.schedule-item-side {
+  display: grid;
+  align-content: start;
+  justify-items: end;
+  gap: 10px;
 }
 
 .library-item {

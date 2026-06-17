@@ -4,6 +4,7 @@ import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
+  CalendarClock,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -11,7 +12,9 @@ import {
   ImagePlus,
   Library,
   LogOut,
+  Plug,
   Save,
+  Send,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -30,12 +33,22 @@ import {
   savePost,
   type SavedPost
 } from "@/lib/saved-posts";
+import {
+  cancelScheduledPost,
+  disconnectSocialAccount,
+  getScheduledPosts,
+  getSocialAccounts,
+  schedulePost,
+  startMetaConnection,
+  type ScheduledPost,
+  type SocialAccount
+} from "@/lib/social-client";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getUsageSummary, type UsageSummary } from "@/lib/usage-client";
 
 type Mode = "criativo" | "contextual";
 type VisualFormat = "imagem_unica" | "carrossel";
-type ActiveView = "gerar" | "biblioteca" | "perfil" | "uso";
+type ActiveView = "gerar" | "biblioteca" | "agenda" | "conexoes" | "perfil" | "uso";
 type DashboardProfile = {
   email: string;
   emailConfirmed: boolean;
@@ -75,6 +88,10 @@ export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [result, setResult] = useState<GeneratedPost | null>(null);
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
+  const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
+  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
+  const [selectedSocialAccountId, setSelectedSocialAccountId] = useState("");
+  const [scheduleDateTime, setScheduleDateTime] = useState("");
   const [profile, setProfile] = useState<DashboardProfile>({
     email: "",
     emailConfirmed: false,
@@ -85,8 +102,11 @@ export default function Home() {
   });
   const [error, setError] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -132,6 +152,7 @@ export default function Home() {
       );
 
     refreshUsageSummary().catch(() => undefined);
+    refreshSocialData().catch(() => undefined);
   }, []);
 
   const activePlan = getPlan(profile.plan) || plans[1];
@@ -234,6 +255,17 @@ export default function Home() {
     setUsageSummary(summary);
   }
 
+  async function refreshSocialData() {
+    const [accounts, schedules] = await Promise.all([
+      getSocialAccounts(),
+      getScheduledPosts()
+    ]);
+
+    setSocialAccounts(accounts);
+    setScheduledPosts(schedules);
+    setSelectedSocialAccountId((current) => current || accounts[0]?.id || "");
+  }
+
   function fillExample() {
     if (mode === "criativo") {
       setNiche(examples.creative.niche);
@@ -292,6 +324,75 @@ export default function Home() {
       setActiveView("biblioteca");
     } catch {
       setError("Nao foi possivel salvar este post na biblioteca.");
+    }
+  }
+
+  async function connectInstagram() {
+    try {
+      setScheduleError(null);
+      const url = await startMetaConnection();
+      window.location.href = url;
+    } catch (caughtError) {
+      setScheduleError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Nao foi possivel conectar Instagram."
+      );
+    }
+  }
+
+  async function scheduleCurrentPost() {
+    if (!result) {
+      return;
+    }
+
+    setScheduleError(null);
+    setScheduleMessage(null);
+    setIsScheduling(true);
+
+    try {
+      if (!selectedSocialAccountId) {
+        throw new Error("Conecte e selecione uma conta do Instagram.");
+      }
+
+      if (!scheduleDateTime) {
+        throw new Error("Escolha data e horario para publicar.");
+      }
+
+      await schedulePost({
+        post: result,
+        scheduledFor: new Date(scheduleDateTime).toISOString(),
+        socialAccountId: selectedSocialAccountId
+      });
+      await refreshSocialData();
+      setScheduleMessage("Post agendado com sucesso.");
+      setActiveView("agenda");
+    } catch (caughtError) {
+      setScheduleError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Nao foi possivel agendar este post."
+      );
+    } finally {
+      setIsScheduling(false);
+    }
+  }
+
+  async function removeSocialAccount(id: string) {
+    try {
+      await disconnectSocialAccount(id);
+      await refreshSocialData();
+    } catch {
+      setScheduleError("Nao foi possivel desconectar a conta.");
+    }
+  }
+
+  async function cancelSchedule(id: string) {
+    try {
+      await cancelScheduledPost(id);
+      await refreshSocialData();
+    } catch {
+      setScheduleError("Nao foi possivel cancelar o agendamento.");
     }
   }
 
@@ -366,6 +467,24 @@ export default function Home() {
             <Library size={18} />
             Meus posts
             <span>{savedPosts.length}</span>
+          </button>
+          <button
+            className={clsx(activeView === "agenda" && "active")}
+            type="button"
+            onClick={() => setActiveView("agenda")}
+          >
+            <CalendarClock size={18} />
+            Agendamentos
+            <span>{scheduledPosts.length}</span>
+          </button>
+          <button
+            className={clsx(activeView === "conexoes" && "active")}
+            type="button"
+            onClick={() => setActiveView("conexoes")}
+          >
+            <Plug size={18} />
+            Conexoes
+            <span>{socialAccounts.length}</span>
           </button>
           <button
             className={clsx(activeView === "uso" && "active")}
@@ -577,6 +696,39 @@ export default function Home() {
               <h2>Post completo pronto para o calendario</h2>
             </div>
               <div className="topbar-actions">
+                {result && (
+                  <div className="schedule-inline">
+                    <select
+                      aria-label="Conta do Instagram"
+                      value={selectedSocialAccountId}
+                      onChange={(event) =>
+                        setSelectedSocialAccountId(event.target.value)
+                      }
+                    >
+                      <option value="">Conta Instagram</option>
+                      {socialAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          @{account.instagram_username || account.page_name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      aria-label="Data e horario"
+                      type="datetime-local"
+                      value={scheduleDateTime}
+                      onChange={(event) => setScheduleDateTime(event.target.value)}
+                    />
+                    <button
+                      className="schedule-button"
+                      type="button"
+                      onClick={scheduleCurrentPost}
+                      disabled={isScheduling || !result}
+                    >
+                      <Send size={16} />
+                      Agendar
+                    </button>
+                  </div>
+                )}
                 <button
                   className="save-button"
                   type="button"
@@ -597,6 +749,9 @@ export default function Home() {
                 </button>
               </div>
           </div>
+
+          {scheduleError && <p className="error-message">{scheduleError}</p>}
+          {scheduleMessage && <p className="success-message">{scheduleMessage}</p>}
 
           {isLoading ? (
             <LoadingPostState />
@@ -626,6 +781,26 @@ export default function Home() {
               error={libraryError}
               posts={savedPosts}
               onDelete={deleteSavedPost}
+            />
+          </DashboardSection>
+        )}
+
+        {activeView === "agenda" && (
+          <DashboardSection eyebrow="Calendario" title="Posts agendados">
+            <ScheduledPostsPanel
+              posts={scheduledPosts}
+              onCancel={cancelSchedule}
+            />
+          </DashboardSection>
+        )}
+
+        {activeView === "conexoes" && (
+          <DashboardSection eyebrow="Canais" title="Facebook e Instagram">
+            <SocialAccountsPanel
+              accounts={socialAccounts}
+              error={scheduleError}
+              onConnect={connectInstagram}
+              onDisconnect={removeSocialAccount}
             />
           </DashboardSection>
         )}
@@ -724,6 +899,111 @@ function DashboardSection({
   );
 }
 
+function SocialAccountsPanel({
+  accounts,
+  error,
+  onConnect,
+  onDisconnect
+}: {
+  accounts: SocialAccount[];
+  error: string | null;
+  onConnect: () => void | Promise<void>;
+  onDisconnect: (id: string) => void | Promise<void>;
+}) {
+  return (
+    <div className="social-panel">
+      <div className="integration-header">
+        <div>
+          <h3>Instagram profissional</h3>
+          <p>
+            Conecte uma conta Business ou Creator vinculada a uma Pagina do
+            Facebook para publicar automaticamente.
+          </p>
+        </div>
+        <button className="primary-button" type="button" onClick={onConnect}>
+          <Plug size={18} />
+          Conectar Instagram
+        </button>
+      </div>
+
+      {error && <p className="error-message">{error}</p>}
+
+      {accounts.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">
+            <Plug size={30} />
+          </div>
+          <h3>Nenhuma conta conectada.</h3>
+          <p>Depois de conectar, voce podera agendar posts direto do dashboard.</p>
+        </div>
+      ) : (
+        <div className="account-list">
+          {accounts.map((account) => (
+            <div className="account-item" key={account.id}>
+              <div className="profile-avatar">
+                {getInitials(account.instagram_username || account.page_name)}
+              </div>
+              <div>
+                <strong>@{account.instagram_username || "instagram"}</strong>
+                <span>{account.page_name}</span>
+              </div>
+              <span className="status-pill">{account.status}</span>
+              <button type="button" onClick={() => onDisconnect(account.id)}>
+                Desconectar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScheduledPostsPanel({
+  onCancel,
+  posts
+}: {
+  onCancel: (id: string) => void | Promise<void>;
+  posts: ScheduledPost[];
+}) {
+  if (posts.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-icon">
+          <CalendarClock size={30} />
+        </div>
+        <h3>Nenhum post agendado.</h3>
+        <p>Gere um post, escolha uma conta do Instagram e defina o horario.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="schedule-list">
+      {posts.map((post) => (
+        <div className="schedule-item" key={post.id}>
+          <div>
+            <p className="eyebrow">@{post.instagram_username || post.page_name}</p>
+            <h3>{formatDateTime(post.scheduled_for)}</h3>
+            <p>{post.caption}</p>
+            {post.error_message && <span>{post.error_message}</span>}
+          </div>
+          <div className="schedule-item-side">
+            <span className={clsx("status-pill", post.status)}>
+              {getScheduleStatusLabel(post.status)}
+            </span>
+            {post.status === "pending" && (
+              <button type="button" onClick={() => onCancel(post.id)}>
+                Cancelar
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function UsagePanel({
   creditLimit,
   remainingCredits,
@@ -780,6 +1060,25 @@ function UsagePanel({
       </div>
     </DashboardSection>
   );
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
+function getScheduleStatusLabel(status: ScheduledPost["status"]) {
+  const labels = {
+    canceled: "Cancelado",
+    failed: "Falhou",
+    pending: "Agendado",
+    published: "Publicado",
+    publishing: "Publicando"
+  };
+
+  return labels[status];
 }
 
 function ProfilePanel({
