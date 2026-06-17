@@ -197,9 +197,8 @@ https://useautonomy.com.br/api/meta/oauth/callback
 Permissoes usadas:
 
 - `pages_show_list`
-- `pages_read_engagement`
-- `instagram_basic`
-- `instagram_content_publish`
+- `instagram_business_basic`
+- `instagram_business_content_publish`
 
 Para gerar `SOCIAL_TOKEN_ENCRYPTION_KEY` localmente:
 
