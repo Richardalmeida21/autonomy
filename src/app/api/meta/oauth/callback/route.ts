@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
     if (accounts.length === 0) {
       throw new Error(
-        "Nenhuma conta Instagram profissional vinculada foi encontrada. Verifique se a Pagina selecionada tem um Instagram profissional conectado e se a configuracao de login da Meta inclui permissoes de Instagram."
+        "Nenhuma conta Instagram profissional foi encontrada. Verifique se a conta e Business ou Creator e se a configuracao da Meta inclui permissoes de Instagram."
       );
     }
 
@@ -49,12 +49,13 @@ export async function GET(request: Request) {
     for (const account of accounts) {
       await database.query(
         `insert into social_accounts (
-           user_id, provider, page_id, page_name, instagram_business_account_id,
+           user_id, provider, auth_flow, page_id, page_name, instagram_business_account_id,
            instagram_username, access_token_encrypted, token_expires_at, status
          )
-         values ($1, 'meta', $2, $3, $4, $5, $6, $7, 'connected')
+         values ($1, 'meta', $2, $3, $4, $5, $6, $7, $8, 'connected')
          on conflict (user_id, instagram_business_account_id)
          do update set
+           auth_flow = excluded.auth_flow,
            page_id = excluded.page_id,
            page_name = excluded.page_name,
            instagram_username = excluded.instagram_username,
@@ -63,6 +64,7 @@ export async function GET(request: Request) {
            status = 'connected'`,
         [
           userId,
+          account.authFlow,
           account.pageId,
           account.pageName,
           account.instagramBusinessAccountId,

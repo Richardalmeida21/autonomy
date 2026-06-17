@@ -44,7 +44,7 @@ async function handlePublishCron(request: Request) {
   for (const scheduledPost of claimedPosts.rows) {
     try {
       const accountResult = await database.query(
-        `select id, instagram_business_account_id, access_token_encrypted
+        `select id, auth_flow, instagram_business_account_id, access_token_encrypted
          from social_accounts
          where id = $1 and status = 'connected'`,
         [scheduledPost.social_account_id]

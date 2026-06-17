@@ -729,7 +729,7 @@ export default function Home() {
                       <option value="">Conta Instagram</option>
                       {socialAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          @{account.instagram_username || account.page_name}
+                          @{account.instagram_username || account.page_name || "instagram"}
                         </option>
                       ))}
                     </select>
@@ -816,7 +816,7 @@ export default function Home() {
         )}
 
         {activeView === "conexoes" && (
-          <DashboardSection eyebrow="Canais" title="Facebook e Instagram">
+          <DashboardSection eyebrow="Canais" title="Instagram">
             <SocialAccountsPanel
               accounts={socialAccounts}
               error={scheduleError}
@@ -937,8 +937,8 @@ function SocialAccountsPanel({
         <div>
           <h3>Instagram profissional</h3>
           <p>
-            Conecte uma conta Business ou Creator vinculada a uma Pagina do
-            Facebook para publicar automaticamente.
+            Conecte uma conta Business ou Creator para publicar automaticamente,
+            sem depender de Pagina do Facebook.
           </p>
         </div>
         <button className="primary-button" type="button" onClick={onConnect}>
@@ -962,11 +962,17 @@ function SocialAccountsPanel({
           {accounts.map((account) => (
             <div className="account-item" key={account.id}>
               <div className="profile-avatar">
-                {getInitials(account.instagram_username || account.page_name)}
+                {getInitials(
+                  account.instagram_username || account.page_name || "Instagram"
+                )}
               </div>
               <div>
                 <strong>@{account.instagram_username || "instagram"}</strong>
-                <span>{account.page_name}</span>
+                <span>
+                  {account.auth_flow === "instagram_login"
+                    ? "Instagram Login"
+                    : account.page_name || "Conta conectada"}
+                </span>
               </div>
               <span className="status-pill">{account.status}</span>
               <button type="button" onClick={() => onDisconnect(account.id)}>
@@ -1004,7 +1010,9 @@ function ScheduledPostsPanel({
       {posts.map((post) => (
         <div className="schedule-item" key={post.id}>
           <div>
-            <p className="eyebrow">@{post.instagram_username || post.page_name}</p>
+            <p className="eyebrow">
+              @{post.instagram_username || post.page_name || "instagram"}
+            </p>
             <h3>{formatDateTime(post.scheduled_for)}</h3>
             <p>{post.caption}</p>
             {post.error_message && <span>{post.error_message}</span>}

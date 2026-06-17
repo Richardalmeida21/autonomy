@@ -41,6 +41,7 @@ STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_AGENCY=price_...
 META_APP_ID=...
 META_APP_SECRET=...
+INSTAGRAM_AUTH_MODE=direct
 META_LOGIN_CONFIG_ID=...
 META_REDIRECT_URI=https://useautonomy.com.br/api/meta/oauth/callback
 META_GRAPH_VERSION=v23.0
@@ -66,7 +67,7 @@ Abra `http://localhost:3000`.
 - `/sucesso` -> retorno de checkout aprovado
 - `/cancelado` -> checkout cancelado
 - `/api/stripe/webhook` -> webhook da Stripe para atualizar assinatura
-- `/api/meta/oauth/start` -> inicia conexao Facebook/Instagram
+- `/api/meta/oauth/start` -> inicia conexao com Instagram
 - `/api/meta/oauth/callback` -> callback OAuth da Meta
 - `/api/cron/publish-scheduled` -> publica posts agendados
 
@@ -180,13 +181,15 @@ Copie o `Signing secret` do webhook para `STRIPE_WEBHOOK_SECRET` na Vercel.
 
 ## Publicacao automatica no Instagram
 
-O Autonomy usa a Instagram Graph API oficial. O fluxo implementado e:
+O Autonomy usa a API oficial do Instagram. O fluxo principal implementado e
+`Instagram Login`, sem obrigar o cliente a vincular ou selecionar Pagina do
+Facebook:
 
-1. Usuario conecta Facebook/Instagram pelo OAuth da Meta.
-2. O backend salva o Page Access Token criptografado em `social_accounts`.
+1. Usuario conecta uma conta Instagram profissional pelo OAuth do Instagram.
+2. O backend salva o token do Instagram criptografado em `social_accounts`.
 3. Ao agendar, as imagens base64 sao enviadas para o bucket publico `post-images` no Supabase Storage.
 4. O post entra em `scheduled_posts` com status `pending`.
-5. A Vercel Cron chama `/api/cron/publish-scheduled` a cada 5 minutos.
+5. O GitHub Actions chama `/api/cron/publish-scheduled` periodicamente.
 6. O backend cria o media container no Instagram, espera ficar pronto e publica.
 
 No painel da Meta, configure o OAuth redirect URI:
@@ -195,13 +198,12 @@ No painel da Meta, configure o OAuth redirect URI:
 https://useautonomy.com.br/api/meta/oauth/callback
 ```
 
-Para Login do Facebook para Empresas, crie uma configuracao de login no painel
-da Meta e copie o ID para `META_LOGIN_CONFIG_ID`. Quando esse ID existe, o
-Autonomy usa `config_id` em vez de enviar escopos manualmente na URL OAuth.
+Use `INSTAGRAM_AUTH_MODE=direct` na Vercel para manter o fluxo direto pelo
+Instagram. `META_LOGIN_CONFIG_ID` fica como fallback para o fluxo antigo de
+Facebook Login for Business, caso voce precise dele depois.
 
 Permissoes usadas:
 
-- `pages_show_list`
 - `instagram_business_basic`
 - `instagram_business_content_publish`
 
@@ -211,9 +213,12 @@ Para gerar `SOCIAL_TOKEN_ENCRYPTION_KEY` localmente:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-Na Vercel, adicione `CRON_SECRET`. A Vercel envia esse valor automaticamente no header `Authorization` quando chama o cron.
+Na Vercel e no GitHub Actions, adicione o mesmo `CRON_SECRET`. O workflow em
+`.github/workflows/publish-scheduled-posts.yml` envia esse valor no header
+`Authorization`.
 
-Observacao: a conta do Instagram precisa ser profissional (Business ou Creator) e vinculada a uma Pagina do Facebook administrada pelo usuario.
+Observacao: a conta do Instagram precisa ser profissional (Business ou Creator).
+Conta pessoal nao pode publicar automaticamente pela API oficial.
 
 ## Referencias oficiais usadas
 

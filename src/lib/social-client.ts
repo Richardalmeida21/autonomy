@@ -4,8 +4,9 @@ import { getSupabaseClient } from "@/lib/supabase-client";
 export type SocialAccount = {
   id: string;
   provider: string;
-  page_id: string;
-  page_name: string;
+  auth_flow: "facebook_page" | "instagram_login" | null;
+  page_id: string | null;
+  page_name: string | null;
   instagram_business_account_id: string;
   instagram_username: string | null;
   token_expires_at: string | null;
@@ -24,7 +25,7 @@ export type ScheduledPost = {
   error_message: string | null;
   created_at: string;
   instagram_username: string | null;
-  page_name: string;
+  page_name: string | null;
 };
 
 export async function startMetaConnection() {

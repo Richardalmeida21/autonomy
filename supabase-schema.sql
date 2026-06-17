@@ -48,8 +48,9 @@ create table if not exists social_accounts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   provider text not null default 'meta',
-  page_id text not null,
-  page_name text not null,
+  auth_flow text not null default 'instagram_login',
+  page_id text,
+  page_name text,
   instagram_business_account_id text not null,
   instagram_username text,
   access_token_encrypted text not null,
@@ -59,6 +60,13 @@ create table if not exists social_accounts (
   updated_at timestamptz not null default now(),
   unique (user_id, instagram_business_account_id)
 );
+
+alter table social_accounts
+  add column if not exists auth_flow text not null default 'instagram_login';
+
+alter table social_accounts
+  alter column page_id drop not null,
+  alter column page_name drop not null;
 
 create index if not exists social_accounts_user_id_idx
   on social_accounts (user_id, status);

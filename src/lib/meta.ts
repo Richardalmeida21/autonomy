@@ -7,6 +7,11 @@ const defaultScopes = [
   "instagram_business_content_publish"
 ];
 
+const instagramDirectScopes = [
+  "instagram_business_basic",
+  "instagram_business_content_publish"
+];
+
 type MetaAccountResponse = {
   data?: Array<{
     id: string;
@@ -22,6 +27,14 @@ type MetaAccountResponse = {
 type MetaTokenResponse = {
   access_token: string;
   expires_in?: number;
+  user_id?: number;
+};
+
+type InstagramProfileResponse = {
+  account_type?: string;
+  id?: string;
+  user_id?: string;
+  username?: string;
 };
 
 type MetaContainerResponse = {
@@ -37,6 +50,7 @@ type MetaStatusResponse = {
 };
 
 export type ConnectedInstagramAccount = {
+  authFlow: "facebook_page" | "instagram_login";
   pageId: string;
   pageName: string;
   instagramBusinessAccountId: string;
@@ -47,6 +61,7 @@ export type ConnectedInstagramAccount = {
 
 export type SocialAccountRecord = {
   id: string;
+  auth_flow?: "facebook_page" | "instagram_login";
   instagram_business_account_id: string;
   access_token_encrypted: string;
 };
@@ -56,6 +71,21 @@ export function createMetaOAuthUrl(userId: string) {
   const redirectUri = getMetaRedirectUri();
   const state = createSignedOAuthState(userId);
   const loginConfigId = process.env.META_LOGIN_CONFIG_ID;
+
+  if (usesDirectInstagramLogin()) {
+    const params = new URLSearchParams({
+      client_id: appId,
+      enable_fb_login: "0",
+      force_authentication: "1",
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: instagramDirectScopes.join(","),
+      state
+    });
+
+    return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
+  }
+
   const params = new URLSearchParams({
     client_id: appId,
     redirect_uri: redirectUri,
@@ -104,6 +134,10 @@ export function verifyMetaOAuthState(state: string) {
 }
 
 export async function exchangeCodeForInstagramAccounts(code: string) {
+  if (usesDirectInstagramLogin()) {
+    return exchangeCodeForDirectInstagramAccount(code);
+  }
+
   const redirectUri = getMetaRedirectUri();
   const shortToken = await metaGet<MetaTokenResponse>("/oauth/access_token", {
     client_id: getMetaAppId(),
@@ -130,11 +164,64 @@ export async function exchangeCodeForInstagramAccounts(code: string) {
     .map((account) => ({
       pageId: account.id,
       pageName: account.name,
+      authFlow: "facebook_page" as const,
       instagramBusinessAccountId: account.instagram_business_account?.id || "",
       instagramUsername: account.instagram_business_account?.username || "",
       pageAccessToken: account.access_token || "",
       tokenExpiresAt
     }));
+}
+
+async function exchangeCodeForDirectInstagramAccount(code: string) {
+  const redirectUri = getMetaRedirectUri();
+  const shortToken = await instagramFormPost<MetaTokenResponse>(
+    "https://api.instagram.com/oauth/access_token",
+    {
+      client_id: getMetaAppId(),
+      client_secret: getMetaAppSecret(),
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: redirectUri
+    }
+  );
+
+  const longToken = await instagramGet<MetaTokenResponse>(
+    "https://graph.instagram.com/access_token",
+    {
+      access_token: shortToken.access_token,
+      client_secret: getMetaAppSecret(),
+      grant_type: "ig_exchange_token"
+    }
+  );
+  const accessToken = longToken.access_token || shortToken.access_token;
+  const tokenExpiresAt = longToken.expires_in
+    ? new Date(Date.now() + longToken.expires_in * 1000).toISOString()
+    : null;
+  const profile = await instagramGet<InstagramProfileResponse>(
+    `https://graph.instagram.com/${getMetaGraphVersion()}/me`,
+    {
+      access_token: accessToken,
+      fields: "id,user_id,username,account_type"
+    }
+  );
+  const instagramUserId =
+    profile.user_id || profile.id || String(shortToken.user_id || "");
+
+  if (!instagramUserId) {
+    throw new Error("Nao foi possivel identificar a conta do Instagram.");
+  }
+
+  return [
+    {
+      authFlow: "instagram_login" as const,
+      pageId: "",
+      pageName: "Instagram Login",
+      instagramBusinessAccountId: instagramUserId,
+      instagramUsername: profile.username || "instagram",
+      pageAccessToken: accessToken,
+      tokenExpiresAt
+    }
+  ];
 }
 
 export async function publishInstagramMedia({
@@ -282,6 +369,28 @@ async function metaPost<T>(path: string, params: Record<string, string>) {
   return parseMetaResponse<T>(response);
 }
 
+async function instagramGet<T>(url: string, params: Record<string, string>) {
+  const targetUrl = new URL(url);
+  Object.entries(params).forEach(([key, value]) =>
+    targetUrl.searchParams.set(key, value)
+  );
+  const response = await fetch(targetUrl);
+
+  return parseMetaResponse<T>(response);
+}
+
+async function instagramFormPost<T>(url: string, params: Record<string, string>) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams(params)
+  });
+
+  return parseMetaResponse<T>(response);
+}
+
 async function parseMetaResponse<T>(response: Response) {
   const data = await response.json();
 
@@ -344,4 +453,8 @@ function getMetaRedirectUri() {
 
 function getMetaGraphVersion() {
   return process.env.META_GRAPH_VERSION || "v23.0";
+}
+
+function usesDirectInstagramLogin() {
+  return (process.env.INSTAGRAM_AUTH_MODE || "direct").toLowerCase() !== "facebook";
 }

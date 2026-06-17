@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
     const database = getDatabase();
     const result = await database.query(
-      `select id, provider, page_id, page_name, instagram_business_account_id,
+      `select id, provider, auth_flow, page_id, page_name, instagram_business_account_id,
               instagram_username, token_expires_at, status, connected_at
        from social_accounts
        where user_id = $1
