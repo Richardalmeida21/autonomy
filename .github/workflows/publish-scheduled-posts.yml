@@ -15,7 +15,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           APP_URL="${AUTONOMY_APP_URL%/}"
-          curl --fail --location --show-error \
+          curl --fail --location-trusted --show-error \
             --request POST \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${APP_URL}/api/cron/publish-scheduled"
