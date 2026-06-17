@@ -18,10 +18,10 @@ SaaS full-stack para gerar um post completo de Instagram a partir do prompt em `
 npm install
 ```
 
-2. Crie `.env` a partir do exemplo:
+2. Crie um arquivo `.env` local:
 
 ```bash
-cp .env.example .env
+New-Item .env
 ```
 
 3. Configure sua chave:
@@ -33,7 +33,9 @@ OPENAI_IMAGE_MODEL=gpt-image-2
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key
+SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key
 STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_STARTER=price_...
 STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_AGENCY=price_...
@@ -55,6 +57,7 @@ Abra `http://localhost:3000`.
 - `/dashboard` -> gerador de posts
 - `/sucesso` -> retorno de checkout aprovado
 - `/cancelado` -> checkout cancelado
+- `/api/stripe/webhook` -> webhook da Stripe para atualizar assinatura
 
 ## Como funciona
 
@@ -134,7 +137,7 @@ Esse fluxo reduz custo porque gera apenas uma imagem por clique.
 
 ## Biblioteca local
 
-A aba `Meus posts` pode salvar posts no banco Postgres/Supabase usando `DATABASE_URL`.
+A aba `Meus posts` salva posts no banco Postgres/Supabase usando `DATABASE_URL`.
 
 Para criar a tabela:
 
@@ -143,6 +146,26 @@ npm run db:init
 ```
 
 Se a conexao direta do Supabase falhar por DNS/IPv6, copie o conteudo de `supabase-schema.sql` e rode no SQL Editor do Supabase, ou use a connection string do Transaction Pooler no `DATABASE_URL`.
+
+## Seguranca e billing
+
+As rotas de geracao, perfil, biblioteca e checkout exigem token Supabase no header `Authorization: Bearer ...`.
+
+O consumo de creditos e registrado no banco em `usage_events`. A API recalcula o custo no servidor antes de chamar a OpenAI, entao alterar o frontend nao libera geracoes extras.
+
+No Stripe, crie um endpoint de webhook apontando para:
+
+```bash
+https://seu-dominio.vercel.app/api/stripe/webhook
+```
+
+Eventos recomendados:
+
+- `checkout.session.completed`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
+Copie o `Signing secret` do webhook para `STRIPE_WEBHOOK_SECRET` na Vercel.
 
 ## Referencias oficiais usadas
 

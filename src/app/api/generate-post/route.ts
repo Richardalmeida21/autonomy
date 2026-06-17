@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { getAutonomyPrompt } from "@/lib/autonomy-prompt";
+import { getDatabase } from "@/lib/db";
 import { getGenerationModel, getImageModel, getOpenAIClient } from "@/lib/openai";
+import { getPlan, plans } from "@/lib/plans";
 import {
   generatedPostSchema,
   generatedPostZodSchema,
-  postInputSchema
+  postInputSchema,
+  type PostInput
 } from "@/lib/post-schema";
+import { getUserFromRequest } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    const user = await getUserFromRequest(request);
+
+    if (!user) {
+      return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+    }
+
     const body = await request.json();
     const parsedInput = postInputSchema.safeParse(body);
 
@@ -23,6 +33,15 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const creditCost = getGenerationCreditCost(parsedInput.data);
+    const usage = await assertGenerationAllowed({
+      userId: user.id,
+      email: user.email || "",
+      metadata: user.user_metadata,
+      input: parsedInput.data,
+      creditCost
+    });
 
     const client = getOpenAIClient();
     const systemPrompt = await getAutonomyPrompt();
@@ -115,11 +134,28 @@ export async function POST(request: Request) {
       }
     }
 
+    await recordUsageEvent({
+      userId: user.id,
+      creditCost,
+      metadata: {
+        mode: parsedInput.data.modo,
+        niche: parsedInput.data.nicho,
+        theme: parsedInput.data.tema,
+        visual_format:
+          parsedInput.data.modo === "criativo"
+            ? parsedInput.data.formato_visual
+            : "contextual",
+        generated_images: generatedPost.post.generated_images.length,
+        credits_before: usage.usedCredits,
+        credits_limit: usage.creditLimit
+      }
+    });
+
     return NextResponse.json(generatedPost);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Erro inesperado ao gerar post.";
-    const status = message.includes("OPENAI_API_KEY") ? 500 : 502;
+    const status = getErrorStatus(message);
 
     return NextResponse.json(
       {
@@ -197,4 +233,170 @@ async function generateImageForOption({
 
   const image = result.data?.[0]?.b64_json;
   return image ? `data:image/png;base64,${image}` : null;
+}
+
+function getGenerationCreditCost(input: PostInput) {
+  if (input.modo === "contextual") {
+    return 1;
+  }
+
+  if (input.formato_visual === "carrossel") {
+    return input.quantidade_imagens || input.detalhes_carrossel?.length || 1;
+  }
+
+  return 1;
+}
+
+async function assertGenerationAllowed({
+  creditCost,
+  email,
+  input,
+  metadata,
+  userId
+}: {
+  creditCost: number;
+  email: string;
+  input: PostInput;
+  metadata: Record<string, unknown>;
+  userId: string;
+}) {
+  const database = getDatabase();
+  const profile = await ensureProfile({
+    database,
+    email,
+    metadata,
+    planId: String(metadata.plan || "pro"),
+    userId
+  });
+
+  if (
+    profile.subscription_status &&
+    !["active", "trialing"].includes(profile.subscription_status)
+  ) {
+    throw new Error("Assinatura inativa. Atualize o pagamento para gerar posts.");
+  }
+
+  const usageResult = await database.query(
+    `select coalesce(sum(credits_used), 0)::int as used_credits
+     from usage_events
+     where user_id = $1
+       and created_at >= date_trunc('month', now())`,
+    [userId]
+  );
+  const usedCredits = Number(usageResult.rows[0]?.used_credits || 0);
+  const creditLimit = Number(profile.credits_limit || plans[1].creditLimit);
+
+  if (usedCredits + creditCost > creditLimit) {
+    throw new Error(
+      `Creditos insuficientes. Este post usa ${creditCost} credito(s), voce tem ${Math.max(
+        creditLimit - usedCredits,
+        0
+      )} restante(s).`
+    );
+  }
+
+  if (
+    input.modo === "criativo" &&
+    input.formato_visual === "carrossel" &&
+    creditCost > 4
+  ) {
+    throw new Error("Carrossel limitado a 4 imagens.");
+  }
+
+  return { creditLimit, usedCredits };
+}
+
+async function ensureProfile({
+  database,
+  email,
+  metadata,
+  planId,
+  userId
+}: {
+  database: ReturnType<typeof getDatabase>;
+  email: string;
+  metadata: Record<string, unknown>;
+  planId: string;
+  userId: string;
+}) {
+  const currentProfile = await database.query(
+    `select id, email, plan, subscription_status, credits_limit
+     from profiles
+     where id = $1`,
+    [userId]
+  );
+
+  if (currentProfile.rowCount && currentProfile.rows[0]) {
+    return currentProfile.rows[0] as {
+      id: string;
+      email: string;
+      plan: string;
+      subscription_status: string | null;
+      credits_limit: number;
+    };
+  }
+
+  const plan = getPlan(planId) || plans[1];
+  const insertedProfile = await database.query(
+    `insert into profiles (id, email, full_name, document, phone, plan, credits_limit)
+     values ($1, $2, $3, $4, $5, $6, $7)
+     returning id, email, plan, subscription_status, credits_limit`,
+    [
+      userId,
+      email,
+      String(metadata.full_name || ""),
+      String(metadata.document || ""),
+      String(metadata.phone || ""),
+      plan.id,
+      plan.creditLimit
+    ]
+  );
+
+  return insertedProfile.rows[0] as {
+    id: string;
+    email: string;
+    plan: string;
+    subscription_status: string | null;
+    credits_limit: number;
+  };
+}
+
+async function recordUsageEvent({
+  creditCost,
+  metadata,
+  userId
+}: {
+  creditCost: number;
+  metadata: Record<string, unknown>;
+  userId: string;
+}) {
+  const database = getDatabase();
+
+  await database.query(
+    `insert into usage_events (user_id, event_type, credits_used, metadata)
+     values ($1, $2, $3, $4)`,
+    [userId, "generate_post", creditCost, metadata]
+  );
+}
+
+function getErrorStatus(message: string) {
+  if (
+    message.includes("Nao autenticado") ||
+    message.includes("OPENAI_API_KEY")
+  ) {
+    return message.includes("Nao autenticado") ? 401 : 500;
+  }
+
+  if (
+    message.includes("Creditos insuficientes") ||
+    message.includes("Assinatura inativa")
+  ) {
+    return 402;
+  }
+
+  if (message.includes("Carrossel limitado")) {
+    return 400;
+  }
+
+  return 502;
 }

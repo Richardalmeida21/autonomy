@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { saveProfile } from "@/lib/profile-client";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
@@ -41,7 +42,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         return;
       }
 
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -59,9 +60,27 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         throw signUpError;
       }
 
+      const session = signUpData.session;
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error(
+          "Conta criada. Entre com seu email e senha para finalizar o pagamento."
+        );
+      }
+
+      await saveProfile({
+        email,
+        fullName,
+        document,
+        phone,
+        plan: selectedPlan
+      });
+
       const checkoutResponse = await fetch("/api/checkout", {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({

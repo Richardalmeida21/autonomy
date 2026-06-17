@@ -1,4 +1,5 @@
 import type { GeneratedPost } from "@/lib/post-schema";
+import { getSupabaseClient } from "@/lib/supabase-client";
 
 export type SavedPost = GeneratedPost & {
   id: string;
@@ -6,7 +7,8 @@ export type SavedPost = GeneratedPost & {
 };
 
 export async function getSavedPosts() {
-  const response = await fetch("/api/posts");
+  const headers = await getAuthHeaders();
+  const response = await fetch("/api/posts", { headers });
   const data = await response.json();
 
   if (!response.ok) {
@@ -17,9 +19,11 @@ export async function getSavedPosts() {
 }
 
 export async function savePost(post: SavedPost) {
+  const headers = await getAuthHeaders();
   const response = await fetch("/api/posts", {
     method: "POST",
     headers: {
+      ...headers,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(post)
@@ -32,12 +36,22 @@ export async function savePost(post: SavedPost) {
 }
 
 export async function deletePost(id: string) {
+  const headers = await getAuthHeaders();
   const response = await fetch(`/api/posts/${id}`, {
-    method: "DELETE"
+    method: "DELETE",
+    headers
   });
   const data = await response.json();
 
   if (!response.ok) {
     throw new Error(data.error || "Nao foi possivel remover o post.");
   }
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const supabase = getSupabaseClient();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }

@@ -21,6 +21,7 @@ import {
 import clsx from "clsx";
 import type { GeneratedPost } from "@/lib/post-schema";
 import { getPlan, plans } from "@/lib/plans";
+import { getProfile } from "@/lib/profile-client";
 import {
   deletePost,
   getSavedPosts,
@@ -28,6 +29,7 @@ import {
   type SavedPost
 } from "@/lib/saved-posts";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { getUsageSummary, type UsageSummary } from "@/lib/usage-client";
 
 type Mode = "criativo" | "contextual";
 type VisualFormat = "imagem_unica" | "carrossel";
@@ -81,6 +83,7 @@ export default function Home() {
   });
   const [error, setError] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -90,6 +93,7 @@ export default function Home() {
       const user = data.user;
 
       if (!user) {
+        window.location.href = "/login";
         return;
       }
 
@@ -103,6 +107,19 @@ export default function Home() {
       });
     });
 
+    getProfile()
+      .then((databaseProfile) => {
+        setProfile((current) => ({
+          email: databaseProfile.email || current.email,
+          emailConfirmed: current.emailConfirmed,
+          name: databaseProfile.full_name || current.name,
+          document: databaseProfile.document || current.document,
+          phone: databaseProfile.phone || current.phone,
+          plan: databaseProfile.plan || current.plan
+        }));
+      })
+      .catch(() => undefined);
+
     getSavedPosts()
       .then((posts) => {
         setSavedPosts(posts);
@@ -111,16 +128,18 @@ export default function Home() {
       .catch(() =>
         setLibraryError("Nao foi possivel carregar a biblioteca de posts.")
       );
+
+    refreshUsageSummary().catch(() => undefined);
   }, []);
 
   const activePlan = getPlan(profile.plan) || plans[1];
-  const usedCredits = savedPosts.reduce(
-    (total, savedPost) => total + getPostCreditCost(savedPost.post),
-    0
-  );
-  const creditLimit = activePlan.creditLimit;
-  const remainingCredits = Math.max(creditLimit - usedCredits, 0);
-  const usagePercent = Math.min(Math.round((usedCredits / creditLimit) * 100), 100);
+  const creditLimit = usageSummary?.creditsLimit || activePlan.creditLimit;
+  const usedCredits = usageSummary?.usedCredits || 0;
+  const remainingCredits =
+    usageSummary?.remainingCredits || Math.max(creditLimit - usedCredits, 0);
+  const usagePercent =
+    usageSummary?.usagePercent ||
+    Math.min(Math.round((usedCredits / creditLimit) * 100), 100);
 
   const payload = useMemo(() => {
     if (mode === "criativo") {
@@ -171,9 +190,18 @@ export default function Home() {
     setIsLoading(true);
 
     try {
+      const supabase = getSupabaseClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      if (!token) {
+        throw new Error("Sessao expirada. Entre novamente para gerar posts.");
+      }
+
       const response = await fetch("/api/generate-post", {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify(payload)
@@ -187,6 +215,7 @@ export default function Home() {
 
       setResult(data);
       setActiveView("gerar");
+      await refreshUsageSummary();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -196,6 +225,11 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function refreshUsageSummary() {
+    const summary = await getUsageSummary();
+    setUsageSummary(summary);
   }
 
   function fillExample() {
@@ -731,10 +765,7 @@ function UsagePanel({
         <div className="usage-bar large">
           <span style={{ width: `${usagePercent}%` }} />
         </div>
-        <p>
-          O calculo atual considera os posts salvos na biblioteca. Quando
-          ativarmos controle de assinatura, o uso sera registrado por geracao.
-        </p>
+        <p>O consumo e registrado no servidor a cada geracao concluida.</p>
       </div>
 
       <div className="usage-panel">
@@ -879,14 +910,6 @@ function LoadingPostState() {
 function getInitials(name: string) {
   const [first = "U", second = "A"] = name.trim().split(/\s+/);
   return `${first[0] || "U"}${second[0] || ""}`.toUpperCase();
-}
-
-function getPostCreditCost(post: GeneratedPost["post"]) {
-  if (post.generated_images.length > 0) {
-    return post.generated_images.length;
-  }
-
-  return post.generated_image ? 1 : 0;
 }
 
 function PostCard({

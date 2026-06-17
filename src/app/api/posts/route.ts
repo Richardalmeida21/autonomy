@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDatabase } from "@/lib/db";
 import { generatedPostZodSchema } from "@/lib/post-schema";
+import { getUserFromRequest } from "@/lib/supabase-server";
 
 const savedPostSchema = generatedPostZodSchema.extend({
   id: z.string().uuid(),
@@ -10,13 +11,21 @@ const savedPostSchema = generatedPostZodSchema.extend({
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const user = await getUserFromRequest(request);
+
+    if (!user) {
+      return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+    }
+
     const database = getDatabase();
     const result = await database.query(
       `select id, created_at, payload
        from saved_posts
-       order by created_at desc`
+       where user_id = $1
+       order by created_at desc`,
+      [user.id]
     );
 
     const posts = result.rows.map((row) => ({
@@ -43,6 +52,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const user = await getUserFromRequest(request);
+
+    if (!user) {
+      return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+    }
+
     const body = await request.json();
     const parsedPost = savedPostSchema.safeParse(body);
 
@@ -60,11 +75,14 @@ export async function POST(request: Request) {
     const database = getDatabase();
 
     await database.query(
-      `insert into saved_posts (id, created_at, payload)
-       values ($1, $2, $3)
+      `insert into saved_posts (id, user_id, created_at, payload)
+       values ($1, $2, $3, $4)
        on conflict (id)
-       do update set created_at = excluded.created_at, payload = excluded.payload`,
-      [id, createdAt, payload]
+       do update set
+         user_id = excluded.user_id,
+         created_at = excluded.created_at,
+         payload = excluded.payload`,
+      [id, user.id, createdAt, payload]
     );
 
     return NextResponse.json({ ok: true });
