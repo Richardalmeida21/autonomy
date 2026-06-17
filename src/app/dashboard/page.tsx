@@ -110,6 +110,23 @@ export default function Home() {
 
   useEffect(() => {
     const supabase = getSupabaseClient();
+    const params = new URLSearchParams(window.location.search);
+    const metaError = params.get("meta_error");
+    const metaConnected = params.get("meta_connected");
+
+    if (metaError) {
+      setScheduleError(decodeURIComponent(metaError));
+      setActiveView("conexoes");
+    }
+
+    if (metaConnected) {
+      setScheduleMessage("Instagram conectado com sucesso.");
+      setActiveView("conexoes");
+    }
+
+    if (metaError || metaConnected) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
 
     supabase.auth.getUser().then(({ data }) => {
       const user = data.user;

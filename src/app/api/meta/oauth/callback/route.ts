@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
     if (accounts.length === 0) {
       throw new Error(
-        "Nenhuma conta profissional do Instagram vinculada a uma Pagina do Facebook foi encontrada."
+        "Nenhuma conta Instagram profissional vinculada foi encontrada. Verifique se a Pagina selecionada tem um Instagram profissional conectado e se a configuracao de login da Meta inclui permissoes de Instagram."
       );
     }
 
