@@ -3,6 +3,7 @@ import { getAutonomyPrompt } from "@/lib/autonomy-prompt";
 import { getDatabase } from "@/lib/db";
 import { getGenerationModel, getImageModel, getOpenAIClient } from "@/lib/openai";
 import { getPlan, plans } from "@/lib/plans";
+import { uploadPostImages } from "@/lib/post-images";
 import {
   generatedPostSchema,
   generatedPostZodSchema,
@@ -131,6 +132,17 @@ export async function POST(request: Request) {
         );
         generatedPost.post.generated_image =
           generatedPost.post.generated_images[0] || null;
+      }
+
+      if (generatedPost.post.generated_images.length > 0) {
+        const imageUrls = await uploadPostImages({
+          images: generatedPost.post.generated_images,
+          postId: crypto.randomUUID(),
+          userId: user.id
+        });
+
+        generatedPost.post.generated_images = imageUrls;
+        generatedPost.post.generated_image = imageUrls[0] || null;
       }
     }
 

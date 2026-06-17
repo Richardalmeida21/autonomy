@@ -28,7 +28,7 @@ export async function savePost(post: SavedPost) {
     },
     body: JSON.stringify(post)
   });
-  const data = await response.json();
+  const data = await readJsonResponse(response);
 
   if (!response.ok) {
     throw new Error(data.error || "Nao foi possivel salvar o post.");
@@ -54,4 +54,17 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   const token = data.session?.access_token;
 
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function readJsonResponse(response: Response) {
+  try {
+    return await response.json();
+  } catch {
+    return {
+      error:
+        response.status === 413
+          ? "Imagem muito grande para salvar. Gere novamente para salvar em formato otimizado."
+          : "Resposta inesperada do servidor."
+    };
+  }
 }

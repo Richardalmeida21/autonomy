@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDatabase } from "@/lib/db";
+import { uploadPostImages } from "@/lib/post-images";
 import { generatedPostZodSchema } from "@/lib/post-schema";
 import { getUserFromRequest } from "@/lib/supabase-server";
 
@@ -72,6 +73,24 @@ export async function POST(request: Request) {
     }
 
     const { createdAt, id, ...payload } = parsedPost.data;
+    const images =
+      payload.post.generated_images.length > 0
+        ? payload.post.generated_images
+        : payload.post.generated_image
+          ? [payload.post.generated_image]
+          : [];
+
+    if (images.some((image) => image.startsWith("data:"))) {
+      const imageUrls = await uploadPostImages({
+        images,
+        postId: id,
+        userId: user.id
+      });
+
+      payload.post.generated_images = imageUrls;
+      payload.post.generated_image = imageUrls[0] || null;
+    }
+
     const database = getDatabase();
 
     await database.query(

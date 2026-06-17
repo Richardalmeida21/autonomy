@@ -322,8 +322,12 @@ export default function Home() {
       await savePost(savedPost);
       setSavedPosts([savedPost, ...savedPosts]);
       setActiveView("biblioteca");
-    } catch {
-      setError("Nao foi possivel salvar este post na biblioteca.");
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Nao foi possivel salvar este post na biblioteca."
+      );
     }
   }
 
