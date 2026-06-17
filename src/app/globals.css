@@ -1591,6 +1591,53 @@ button {
   font-family: 'Inter', sans-serif;
 }
 
+.legal-page {
+  min-height: 100vh;
+  padding: 48px 20px;
+  background:
+    radial-gradient(at 0% 0%, rgba(0, 82, 255, 0.04) 0px, transparent 48%),
+    #F8F9FA;
+}
+
+.legal-document {
+  max-width: 860px;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: clamp(28px, 5vw, 52px);
+  background: #ffffff;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.04);
+}
+
+.legal-back {
+  display: inline-flex;
+  margin-bottom: 28px;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.legal-document h1 {
+  max-width: 760px;
+  margin-bottom: 18px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.legal-document h2 {
+  margin-top: 30px;
+  margin-bottom: 10px;
+  font-size: 1.15rem;
+}
+
+.legal-document p {
+  margin: 0 0 14px;
+  color: #334155;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
 .auth-card {
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.06);
