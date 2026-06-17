@@ -41,6 +41,7 @@ STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_AGENCY=price_...
 META_APP_ID=...
 META_APP_SECRET=...
+META_LOGIN_CONFIG_ID=...
 META_REDIRECT_URI=https://useautonomy.com.br/api/meta/oauth/callback
 META_GRAPH_VERSION=v23.0
 SOCIAL_TOKEN_ENCRYPTION_KEY=base64_com_32_bytes
@@ -193,6 +194,10 @@ No painel da Meta, configure o OAuth redirect URI:
 ```bash
 https://useautonomy.com.br/api/meta/oauth/callback
 ```
+
+Para Login do Facebook para Empresas, crie uma configuracao de login no painel
+da Meta e copie o ID para `META_LOGIN_CONFIG_ID`. Quando esse ID existe, o
+Autonomy usa `config_id` em vez de enviar escopos manualmente na URL OAuth.
 
 Permissoes usadas:
 

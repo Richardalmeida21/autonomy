@@ -55,13 +55,19 @@ export function createMetaOAuthUrl(userId: string) {
   const appId = getMetaAppId();
   const redirectUri = getMetaRedirectUri();
   const state = createSignedOAuthState(userId);
+  const loginConfigId = process.env.META_LOGIN_CONFIG_ID;
   const params = new URLSearchParams({
     client_id: appId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: defaultScopes.join(","),
     state
   });
+
+  if (loginConfigId) {
+    params.set("config_id", loginConfigId);
+  } else {
+    params.set("scope", defaultScopes.join(","));
+  }
 
   return `https://www.facebook.com/${getMetaGraphVersion()}/dialog/oauth?${params.toString()}`;
 }
