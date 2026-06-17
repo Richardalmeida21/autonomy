@@ -12,6 +12,7 @@ import {
   Library,
   LogOut,
   Save,
+  ShieldCheck,
   Sparkles,
   Trash2,
   UploadCloud,
@@ -33,6 +34,7 @@ type VisualFormat = "imagem_unica" | "carrossel";
 type ActiveView = "gerar" | "biblioteca" | "perfil" | "uso";
 type DashboardProfile = {
   email: string;
+  emailConfirmed: boolean;
   name: string;
   document: string;
   phone: string;
@@ -71,6 +73,7 @@ export default function Home() {
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
   const [profile, setProfile] = useState<DashboardProfile>({
     email: "",
+    emailConfirmed: false,
     name: "Usuario Autonomy",
     document: "",
     phone: "",
@@ -92,6 +95,7 @@ export default function Home() {
 
       setProfile({
         email: user.email || "",
+        emailConfirmed: Boolean(user.email_confirmed_at),
         name: String(user.user_metadata.full_name || "Usuario Autonomy"),
         document: String(user.user_metadata.document || ""),
         phone: String(user.user_metadata.phone || ""),
@@ -762,6 +766,10 @@ function ProfilePanel({
           <span>Plano {planName}</span>
         </div>
         <div className="profile-details">
+          <EmailConfirmationNotice
+            email={profile.email}
+            isConfirmed={profile.emailConfirmed}
+          />
           <InfoRow label="Nome" value={profile.name} />
           <InfoRow label="Email" value={profile.email} />
           <InfoRow label="CPF/CNPJ" value={profile.document || "Nao informado"} />
@@ -770,6 +778,73 @@ function ProfilePanel({
         </div>
       </div>
     </DashboardSection>
+  );
+}
+
+function EmailConfirmationNotice({
+  email,
+  isConfirmed
+}: {
+  email: string;
+  isConfirmed: boolean;
+}) {
+  const [message, setMessage] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+
+  async function resendConfirmation() {
+    if (!email) {
+      return;
+    }
+
+    setIsSending(true);
+    setMessage(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/login?confirmed=1`
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage("Email de confirmacao reenviado.");
+    } catch {
+      setMessage("Nao foi possivel reenviar agora.");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  if (isConfirmed) {
+    return (
+      <div className="email-notice confirmed">
+        <ShieldCheck size={18} />
+        <div>
+          <strong>Email confirmado</strong>
+          <p>Sua conta esta com email verificado.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="email-notice pending">
+      <ShieldCheck size={18} />
+      <div>
+        <strong>Email ainda nao confirmado</strong>
+        <p>Confirme seu email para aumentar a seguranca da conta.</p>
+        <button type="button" onClick={resendConfirmation} disabled={isSending}>
+          {isSending ? "Enviando..." : "Reenviar confirmacao"}
+        </button>
+        {message && <span>{message}</span>}
+      </div>
+    </div>
   );
 }
 

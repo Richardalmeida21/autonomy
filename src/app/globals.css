@@ -321,6 +321,57 @@ button {
   gap: 10px;
 }
 
+.email-notice {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.email-notice.confirmed {
+  border: 1px solid rgba(22, 138, 82, 0.22);
+  color: var(--success);
+  background: rgba(22, 138, 82, 0.08);
+}
+
+.email-notice.pending {
+  border: 1px solid rgba(242, 183, 5, 0.28);
+  color: #7a5b00;
+  background: rgba(242, 183, 5, 0.12);
+}
+
+.email-notice strong,
+.email-notice p,
+.email-notice span {
+  display: block;
+}
+
+.email-notice p {
+  margin: 3px 0 0;
+  line-height: 1.4;
+}
+
+.email-notice button {
+  margin-top: 10px;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #fff;
+  background: var(--surface-strong);
+  font-weight: 850;
+}
+
+.email-notice button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.email-notice span {
+  margin-top: 8px;
+  font-weight: 850;
+}
+
 .info-row {
   display: flex;
   justify-content: space-between;
@@ -954,6 +1005,16 @@ textarea:focus {
   border-radius: 8px;
   color: var(--danger);
   background: rgba(196, 54, 47, 0.08);
+  font-weight: 700;
+}
+
+.success-message {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(22, 138, 82, 0.24);
+  border-radius: 8px;
+  color: var(--success);
+  background: rgba(22, 138, 82, 0.08);
   font-weight: 700;
 }
 

@@ -10,6 +10,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedPlan = searchParams.get("plan") || "pro";
+  const wasConfirmed = searchParams.get("confirmed") === "1";
   const [fullName, setFullName] = useState("");
   const [document, setDocument] = useState("");
   const [phone, setPhone] = useState("");
@@ -44,6 +45,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         email,
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/login?confirmed=1`,
           data: {
             full_name: fullName,
             document,
@@ -158,6 +160,11 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             />
           </label>
           {error && <p className="error-message">{error}</p>}
+          {mode === "login" && wasConfirmed && (
+            <p className="success-message">
+              Email confirmado. Agora voce ja pode entrar.
+            </p>
+          )}
           <button className="primary-button" type="submit" disabled={isLoading}>
             <ArrowRight size={18} />
             {isLoading
