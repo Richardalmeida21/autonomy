@@ -42,6 +42,8 @@ STRIPE_PRICE_AGENCY=price_...
 META_APP_ID=...
 META_APP_SECRET=...
 INSTAGRAM_AUTH_MODE=direct
+INSTAGRAM_APP_ID=...
+INSTAGRAM_APP_SECRET=...
 META_LOGIN_CONFIG_ID=...
 META_REDIRECT_URI=https://useautonomy.com.br/api/meta/oauth/callback
 META_GRAPH_VERSION=v23.0
@@ -201,6 +203,11 @@ https://useautonomy.com.br/api/meta/oauth/callback
 Use `INSTAGRAM_AUTH_MODE=direct` na Vercel para manter o fluxo direto pelo
 Instagram. `META_LOGIN_CONFIG_ID` fica como fallback para o fluxo antigo de
 Facebook Login for Business, caso voce precise dele depois.
+
+No fluxo direto, configure tambem `INSTAGRAM_APP_ID` e `INSTAGRAM_APP_SECRET`
+com o ID e a chave secreta exibidos na tela **API do Instagram**. Se essas
+variaveis nao existirem, o app usa `META_APP_ID` e `META_APP_SECRET` como
+fallback.
 
 Permissoes usadas:
 

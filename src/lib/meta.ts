@@ -67,14 +67,13 @@ export type SocialAccountRecord = {
 };
 
 export function createMetaOAuthUrl(userId: string) {
-  const appId = getMetaAppId();
   const redirectUri = getMetaRedirectUri();
   const state = createSignedOAuthState(userId);
   const loginConfigId = process.env.META_LOGIN_CONFIG_ID;
 
   if (usesDirectInstagramLogin()) {
     const params = new URLSearchParams({
-      client_id: appId,
+      client_id: getInstagramAppId(),
       enable_fb_login: "0",
       force_authentication: "1",
       redirect_uri: redirectUri,
@@ -87,7 +86,7 @@ export function createMetaOAuthUrl(userId: string) {
   }
 
   const params = new URLSearchParams({
-    client_id: appId,
+    client_id: getMetaAppId(),
     redirect_uri: redirectUri,
     response_type: "code",
     state
@@ -177,8 +176,8 @@ async function exchangeCodeForDirectInstagramAccount(code: string) {
   const shortToken = await instagramFormPost<MetaTokenResponse>(
     "https://api.instagram.com/oauth/access_token",
     {
-      client_id: getMetaAppId(),
-      client_secret: getMetaAppSecret(),
+      client_id: getInstagramAppId(),
+      client_secret: getInstagramAppSecret(),
       code,
       grant_type: "authorization_code",
       redirect_uri: redirectUri
@@ -189,7 +188,7 @@ async function exchangeCodeForDirectInstagramAccount(code: string) {
     "https://graph.instagram.com/access_token",
     {
       access_token: shortToken.access_token,
-      client_secret: getMetaAppSecret(),
+      client_secret: getInstagramAppSecret(),
       grant_type: "ig_exchange_token"
     }
   );
@@ -242,14 +241,16 @@ export async function publishInstagramMedia({
   if (mediaUrls.length === 1) {
     const container = await createInstagramContainer({
       accessToken,
+      authFlow: account.auth_flow,
       caption,
       imageUrl: mediaUrls[0],
       instagramBusinessAccountId: account.instagram_business_account_id
     });
 
-    await waitForContainer(container.id, accessToken);
+    await waitForContainer(container.id, accessToken, account.auth_flow);
     return publishContainer({
       accessToken,
+      authFlow: account.auth_flow,
       creationId: container.id,
       instagramBusinessAccountId: account.instagram_business_account_id
     });
@@ -260,27 +261,30 @@ export async function publishInstagramMedia({
   for (const mediaUrl of mediaUrls.slice(0, 10)) {
     const child = await createInstagramContainer({
       accessToken,
+      authFlow: account.auth_flow,
       imageUrl: mediaUrl,
       instagramBusinessAccountId: account.instagram_business_account_id,
       isCarouselItem: true
     });
-    await waitForContainer(child.id, accessToken);
+    await waitForContainer(child.id, accessToken, account.auth_flow);
     children.push(child.id);
   }
 
-  const carousel = await metaPost<MetaContainerResponse>(
+  const carousel = await graphPost<MetaContainerResponse>(
     `/${account.instagram_business_account_id}/media`,
     {
       access_token: accessToken,
       caption,
       children: children.join(","),
       media_type: "CAROUSEL"
-    }
+    },
+    account.auth_flow
   );
 
-  await waitForContainer(carousel.id, accessToken);
+  await waitForContainer(carousel.id, accessToken, account.auth_flow);
   return publishContainer({
     accessToken,
+    authFlow: account.auth_flow,
     creationId: carousel.id,
     instagramBusinessAccountId: account.instagram_business_account_id
   });
@@ -288,49 +292,66 @@ export async function publishInstagramMedia({
 
 async function createInstagramContainer({
   accessToken,
+  authFlow,
   caption,
   imageUrl,
   instagramBusinessAccountId,
   isCarouselItem = false
 }: {
   accessToken: string;
+  authFlow?: "facebook_page" | "instagram_login";
   caption?: string;
   imageUrl: string;
   instagramBusinessAccountId: string;
   isCarouselItem?: boolean;
 }) {
-  return metaPost<MetaContainerResponse>(`/${instagramBusinessAccountId}/media`, {
-    access_token: accessToken,
-    ...(caption ? { caption } : {}),
-    image_url: imageUrl,
-    ...(isCarouselItem ? { is_carousel_item: "true" } : {})
-  });
+  return graphPost<MetaContainerResponse>(
+    `/${instagramBusinessAccountId}/media`,
+    {
+      access_token: accessToken,
+      ...(caption ? { caption } : {}),
+      image_url: imageUrl,
+      ...(isCarouselItem ? { is_carousel_item: "true" } : {})
+    },
+    authFlow
+  );
 }
 
 async function publishContainer({
   accessToken,
+  authFlow,
   creationId,
   instagramBusinessAccountId
 }: {
   accessToken: string;
+  authFlow?: "facebook_page" | "instagram_login";
   creationId: string;
   instagramBusinessAccountId: string;
 }) {
-  return metaPost<MetaPublishResponse>(
+  return graphPost<MetaPublishResponse>(
     `/${instagramBusinessAccountId}/media_publish`,
     {
       access_token: accessToken,
       creation_id: creationId
-    }
+    },
+    authFlow
   );
 }
 
-async function waitForContainer(containerId: string, accessToken: string) {
+async function waitForContainer(
+  containerId: string,
+  accessToken: string,
+  authFlow?: "facebook_page" | "instagram_login"
+) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const status = await metaGet<MetaStatusResponse>(`/${containerId}`, {
-      access_token: accessToken,
-      fields: "status_code"
-    });
+    const status = await graphGet<MetaStatusResponse>(
+      `/${containerId}`,
+      {
+        access_token: accessToken,
+        fields: "status_code"
+      },
+      authFlow
+    );
 
     if (status.status_code === "FINISHED") {
       return;
@@ -354,17 +375,30 @@ async function metaGet<T>(path: string, params: Record<string, string>) {
   return parseMetaResponse<T>(response);
 }
 
-async function metaPost<T>(path: string, params: Record<string, string>) {
-  const response = await fetch(
-    `https://graph.facebook.com/${getMetaGraphVersion()}${path}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: new URLSearchParams(params)
-    }
-  );
+async function graphGet<T>(
+  path: string,
+  params: Record<string, string>,
+  authFlow?: "facebook_page" | "instagram_login"
+) {
+  const url = new URL(`${getGraphApiBase(authFlow)}${path}`);
+  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+  const response = await fetch(url);
+
+  return parseMetaResponse<T>(response);
+}
+
+async function graphPost<T>(
+  path: string,
+  params: Record<string, string>,
+  authFlow?: "facebook_page" | "instagram_login"
+) {
+  const response = await fetch(`${getGraphApiBase(authFlow)}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams(params)
+  });
 
   return parseMetaResponse<T>(response);
 }
@@ -439,6 +473,14 @@ function getMetaAppSecret() {
   return process.env.META_APP_SECRET;
 }
 
+function getInstagramAppId() {
+  return process.env.INSTAGRAM_APP_ID || getMetaAppId();
+}
+
+function getInstagramAppSecret() {
+  return process.env.INSTAGRAM_APP_SECRET || getMetaAppSecret();
+}
+
 function getMetaRedirectUri() {
   if (process.env.META_REDIRECT_URI) {
     return process.env.META_REDIRECT_URI;
@@ -457,4 +499,13 @@ function getMetaGraphVersion() {
 
 function usesDirectInstagramLogin() {
   return (process.env.INSTAGRAM_AUTH_MODE || "direct").toLowerCase() !== "facebook";
+}
+
+function getGraphApiBase(authFlow?: "facebook_page" | "instagram_login") {
+  const host =
+    authFlow === "instagram_login"
+      ? "https://graph.instagram.com"
+      : "https://graph.facebook.com";
+
+  return `${host}/${getMetaGraphVersion()}`;
 }
