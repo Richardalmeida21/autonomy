@@ -625,7 +625,7 @@ async function completeUsageReservation({
   reservationId: string;
   userId: string;
 }) {
-  await database.query(
+  const result = await database.query(
     `update usage_events
      set metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
      where user_id = $1
@@ -640,6 +640,10 @@ async function completeUsageReservation({
       })
     ]
   );
+
+  if (result.rowCount === 0) {
+    throw new Error("Nao foi possivel confirmar o uso de creditos.");
+  }
 }
 
 async function refundUsageReservation({
@@ -652,11 +656,20 @@ async function refundUsageReservation({
   userId: string;
 }) {
   await database.query(
-    `delete from usage_events
+    `update usage_events
+     set credits_used = 0,
+         metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
      where user_id = $1
        and metadata->>'reservation_id' = $2
        and metadata->>'status' = 'reserved'`,
-    [userId, reservationId]
+    [
+      userId,
+      reservationId,
+      JSON.stringify({
+        refunded_at: new Date().toISOString(),
+        status: "refunded"
+      })
+    ]
   );
 }
 

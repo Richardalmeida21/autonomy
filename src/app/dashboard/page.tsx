@@ -849,6 +849,7 @@ export default function Home() {
           ) : result ? (
             <div className="cards-grid single-card">
               <PostCard
+                hideBuiltInActions
                 editable
                 label="Post gerado"
                 option={result.post}
@@ -1931,6 +1932,7 @@ function PostCard({
   compact = false,
   editable = false,
   extraActions,
+  hideBuiltInActions = false,
   hideActions = false,
   label,
   onChange,
@@ -1939,6 +1941,7 @@ function PostCard({
   compact?: boolean;
   editable?: boolean;
   extraActions?: ReactNode;
+  hideBuiltInActions?: boolean;
   hideActions?: boolean;
   label: string;
   onChange?: (option: GeneratedPost["post"]) => void;
@@ -1997,19 +2000,23 @@ function PostCard({
         {!hideActions && (
           <div className="card-actions">
             {extraActions}
-            <button type="button" onClick={copyCaption} aria-label="Copiar descricao">
-              <Copy size={17} />
-              {copied ? "Copiado" : "Copiar"}
-            </button>
-            <button
-              type="button"
-              onClick={downloadImages}
-              aria-label="Baixar imagem"
-              disabled={images.length === 0}
-            >
-              <Download size={17} />
-              Baixar
-            </button>
+            {!hideBuiltInActions && (
+              <>
+                <button type="button" onClick={copyCaption} aria-label="Copiar descricao">
+                  <Copy size={17} />
+                  {copied ? "Copiado" : "Copiar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadImages}
+                  aria-label="Baixar imagem"
+                  disabled={images.length === 0}
+                >
+                  <Download size={17} />
+                  Baixar
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
