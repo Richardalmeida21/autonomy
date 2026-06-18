@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { toFile } from "openai";
 import { getAutonomyPrompt } from "@/lib/autonomy-prompt";
 import { getDatabase } from "@/lib/db";
 import { getGenerationModel, getImageModel, getOpenAIClient } from "@/lib/openai";
@@ -193,7 +194,7 @@ async function generatePost({
       const images = await Promise.all(
         details.map((visualDetail, index) =>
           generateImageForOption({
-            prompt: generatedPost.post.image_generation_prompt,
+            prompt: null,
             headline: generatedPost.post.headline_da_imagem,
             visualDetail,
             carouselPosition: index + 1,
@@ -223,7 +224,92 @@ async function generatePost({
     }
   }
 
+  if (input.modo === "contextual") {
+    generatedPost.formato_visual = null;
+
+    const contextualImage =
+      (await generateContextualImageFromUpload({
+        client,
+        input,
+        overlayInstructions: generatedPost.post.overlay_instructions,
+        headline: generatedPost.post.headline_da_imagem
+      })) || input.imagem_do_usuario;
+
+    const imageUrls = await uploadPostImages({
+      images: [contextualImage],
+      postId: crypto.randomUUID(),
+      userId
+    });
+
+    generatedPost.post.generated_images = imageUrls;
+    generatedPost.post.generated_image = imageUrls[0] || null;
+  }
+
   return generatedPost;
+}
+
+async function generateContextualImageFromUpload({
+  client,
+  headline,
+  input,
+  overlayInstructions
+}: {
+  client: ReturnType<typeof getOpenAIClient>;
+  headline: string;
+  input: Extract<PostInput, { modo: "contextual" }>;
+  overlayInstructions: string | null;
+}) {
+  try {
+    const uploadedImage = await dataUrlToFile(input.imagem_do_usuario);
+    const prompt = [
+      "Create a polished square Instagram feed image based on the uploaded image.",
+      "Preserve the uploaded image's main identity, logo, brand mark, objects, colors, and important visual features.",
+      "Apply only the requested contextual social-media composition changes.",
+      "",
+      "POST CONTEXT:",
+      input.contexto,
+      "",
+      "USER IMAGE DESCRIPTION:",
+      input.analise_da_imagem_do_usuario,
+      "",
+      "OVERLAY AND DESIGN INSTRUCTIONS:",
+      overlayInstructions || "Use a clean premium layout with balanced spacing.",
+      "",
+      `If text is needed, use only this Portuguese headline: "${headline}".`,
+      "If the user asks for a logo placement, keep the uploaded logo recognizable and place it exactly as requested.",
+      "Do not add fake UI, random words, watermarks, misspellings, or unrelated decorative elements.",
+      "Output a clean 1:1 Instagram-ready image."
+    ].join("\n");
+
+    const result = await client.images.edit({
+      model: getImageModel(),
+      image: uploadedImage,
+      prompt,
+      size: "1024x1024",
+      quality: "medium",
+      n: 1
+    });
+
+    const image = result.data?.[0]?.b64_json;
+    return image ? `data:image/png;base64,${image}` : null;
+  } catch {
+    return null;
+  }
+}
+
+async function dataUrlToFile(dataUrl: string) {
+  const match = dataUrl.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
+
+  if (!match) {
+    throw new Error("Formato de imagem invalido para upload.");
+  }
+
+  const [, contentType, base64] = match;
+  const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1];
+
+  return toFile(Buffer.from(base64, "base64"), `contextual-image.${extension}`, {
+    type: contentType
+  });
 }
 
 async function generateImageForOption({
@@ -243,7 +329,7 @@ async function generateImageForOption({
   prompt: string | null;
   visualDetail: string;
 }) {
-  if (!prompt) {
+  if (!prompt && !visualDetail.trim()) {
     return null;
   }
 
@@ -253,7 +339,8 @@ async function generateImageForOption({
         "Do not use the overall post headline unless the user explicitly wrote it in this slide's mandatory requirements.",
         "Only include readable text that is explicitly requested in this slide's mandatory requirements.",
         "If the user asks for explanatory text without giving the exact words, write a short, accurate Portuguese explanation specifically for this slide.",
-        "Never repeat text from another carousel slide unless this slide's mandatory requirements ask for it."
+        "Never repeat text from another carousel slide unless this slide's mandatory requirements ask for it.",
+        "If this slide asks for a solid/plain background, do not add border objects, food, decorations, photos, icons, patterns, or extra visual elements."
       ]
     : [
         "SINGLE IMAGE TEXT RULES:",
@@ -262,17 +349,36 @@ async function generateImageForOption({
   const layoutRule = isCarousel
     ? "Use a complete slide layout that matches only this slide's purpose. Do not make every slide look like a cover."
     : "Leave enough negative space for the headline and keep the main subject visible.";
+  const globalPromptBlock =
+    prompt && !isCarousel
+      ? [
+          "GLOBAL IMAGE DIRECTION:",
+          prompt,
+          "",
+          "Use the global direction only when it does not conflict with the mandatory user requirements above."
+        ]
+      : [];
 
   const finalPrompt = [
+    isCarousel
+      ? "You are generating exactly one square Instagram carousel slide."
+      : "You are generating exactly one square Instagram feed image.",
+    "The slide-specific requirements below are the source of truth.",
+    isCarousel
+      ? "Do not infer requirements from any other slide."
+      : "Use the mandatory user requirements as the source of truth.",
+    "",
     "MANDATORY USER VISUAL REQUIREMENTS FOR THIS IMAGE:",
     visualDetail,
     "",
     "These mandatory requirements have priority over all other style directions. Follow them literally.",
+    "If the user specifies a background color, use that background color.",
+    "If the user specifies exact text in quotes, render only that exact text, preserving Portuguese spelling and meaning.",
+    "If the user says there should be no visual elements, keep the slide minimal and do not add objects.",
     "Preserve the requested objects, scene, people, action, framing, colors, background, and composition whenever specified.",
     "Do not swap the requested subject for a generic substitute. Do not add unrelated concepts that contradict the mandatory requirements.",
     "",
-    prompt,
-    "",
+    ...globalPromptBlock,
     "Create a polished square Instagram feed post image in 1:1 aspect ratio.",
     carouselPosition && carouselTotal
       ? `This is carousel slide ${carouselPosition} of ${carouselTotal}. Generate only this slide.`

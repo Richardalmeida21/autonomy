@@ -2234,6 +2234,26 @@ textarea:focus {
   gap: 8px;
 }
 
+.result-action-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-action-bar .schedule-button,
+.result-discard-button {
+  min-width: 112px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.result-action-bar .schedule-button.now {
+  min-width: 122px;
+}
+
 .schedule-inline {
   display: inline-flex;
   align-items: center;
@@ -2428,6 +2448,11 @@ textarea:focus {
   background: #f8fafc;
 }
 
+.library-item .saved-post-scheduler {
+  justify-items: stretch;
+  padding: 12px 14px 14px;
+}
+
 .saved-post-scheduler-actions {
   display: inline-flex;
   flex-wrap: nowrap;
@@ -2435,8 +2460,17 @@ textarea:focus {
   gap: 7px;
 }
 
+.library-item .saved-post-scheduler-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .saved-post-scheduler-actions button {
   width: 132px;
+}
+
+.library-item .saved-post-scheduler-actions button {
+  width: 100%;
 }
 
 .saved-post-scheduler button {
@@ -2701,6 +2735,45 @@ textarea:focus {
   box-shadow: 0 7px 16px rgba(0, 82, 255, 0.18);
 }
 
+.library-item .post-card.compact {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "media"
+    "header";
+  gap: 10px;
+  border: 0;
+  border-radius: 0;
+  padding: 0 14px;
+  box-shadow: none;
+}
+
+.library-item .post-card.compact .card-header {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.library-item .post-card.compact .card-header > span {
+  display: none;
+}
+
+.library-item .post-card.compact .card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  width: 100%;
+}
+
+.library-item .post-card.compact .card-header button {
+  width: 100%;
+  min-width: 0;
+}
+
+.library-item .post-card.compact .card-section,
+.library-item .post-card.compact .hashtags {
+  display: none;
+}
+
 .card-header button:hover {
   background: var(--brand-gradient-hover);
   transform: translateY(-1px);
@@ -2709,7 +2782,8 @@ textarea:focus {
 
 .library-list {
   display: grid;
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
 }
 
 .compact-empty {
@@ -2940,8 +3014,9 @@ textarea:focus {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 14px;
-  background: #F8F9FA;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.03);
 }
 
 .library-item-header {
@@ -2950,6 +3025,7 @@ textarea:focus {
   justify-content: space-between;
   gap: 14px;
   min-width: 0;
+  padding: 14px 14px 0;
 }
 
 .library-item-header > div:first-child {
@@ -3015,6 +3091,13 @@ textarea:focus {
 .post-card.compact .carousel-stage {
   height: 164px;
   aspect-ratio: auto;
+}
+
+.library-item .post-card.compact .mock-cover,
+.library-item .post-card.compact .carousel-stage {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
 }
 
 .post-card.compact .media-carousel {
@@ -3448,6 +3531,21 @@ textarea:focus {
       "tags";
   }
 
+  .library-list {
+    grid-template-columns: 1fr;
+  }
+
+  .library-item .post-card.compact {
+    grid-template-areas:
+      "media"
+      "header";
+  }
+
+  .library-item .post-card.compact .card-section,
+  .library-item .post-card.compact .hashtags {
+    display: none;
+  }
+
   .library-item-header {
     align-items: flex-start;
     flex-direction: column;
@@ -3472,12 +3570,14 @@ textarea:focus {
   }
 
   .topbar-actions,
+  .result-action-bar,
   .schedule-inline.compact-actions,
   .saved-post-scheduler-actions,
   .schedule-modal-actions {
     width: 100%;
   }
 
+  .result-action-bar,
   .schedule-inline.compact-actions,
   .saved-post-scheduler-actions,
   .schedule-modal-actions {
@@ -3485,6 +3585,7 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .result-action-bar button,
   .schedule-inline.compact-actions button,
   .saved-post-scheduler-actions button,
   .schedule-modal-actions button {

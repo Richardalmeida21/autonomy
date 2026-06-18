@@ -212,6 +212,7 @@ export default function Home() {
       tema: theme,
       contexto: context,
       possui_imagem_propria: true,
+      imagem_do_usuario: imagePreview,
       analise_da_imagem_do_usuario: imageAnalysis
     };
   }, [
@@ -219,6 +220,7 @@ export default function Home() {
     carouselDetails,
     context,
     imageAnalysis,
+    imagePreview,
     mode,
     niche,
     singleImageDetail,
@@ -233,6 +235,10 @@ export default function Home() {
     setIsLoading(true);
 
     try {
+      if (mode === "contextual" && !imagePreview) {
+        throw new Error("Envie uma imagem para gerar o post contextual.");
+      }
+
       const supabase = getSupabaseClient();
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
@@ -814,7 +820,7 @@ export default function Home() {
             </div>
               <div className="topbar-actions">
                 {result && (
-                  <div className="schedule-inline compact-actions">
+                  <div className="result-action-bar">
                     <button
                       className="schedule-button"
                       type="button"
@@ -831,7 +837,7 @@ export default function Home() {
                       disabled={isScheduling || isPublishingNow || !result}
                     >
                       <Send size={16} />
-                      {isPublishingNow ? "Publicando" : "Publicar agora"}
+                      {isPublishingNow ? "Postando" : "Postar agora"}
                     </button>
                   </div>
                 )}
@@ -842,7 +848,7 @@ export default function Home() {
                   </span>
                 )}
                 <button
-                  className="discard-button"
+                  className="discard-button result-discard-button"
                   type="button"
                   onClick={discardCurrentPost}
                   disabled={!result || isLoading}
@@ -1034,45 +1040,45 @@ function SavedPostsLibrary({
       ) : (
         <div className="library-list">
           {visiblePosts.map((savedPost) => (
-        <div className="library-item" key={savedPost.id}>
-          <div className="library-item-header">
-            <div>
-              <p className="eyebrow">{savedPost.nicho}</p>
-              <h3>{savedPost.post.headline_da_imagem}</h3>
+            <div className="library-item" key={savedPost.id}>
+              <div className="library-item-header">
+                <div>
+                  <p className="eyebrow">{savedPost.nicho}</p>
+                  <h3>{savedPost.post.headline_da_imagem}</h3>
+                </div>
+              </div>
+              <PostCard
+                compact
+                label="Post salvo"
+                option={savedPost.post}
+                extraActions={
+                  <>
+                    <button
+                      className={clsx("favorite-button", savedPost.isFavorite && "active")}
+                      type="button"
+                      onClick={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
+                    >
+                      <Star size={16} />
+                      {savedPost.isFavorite ? "Favorito" : "Favoritar"}
+                    </button>
+                    <button
+                      className="remove-button"
+                      type="button"
+                      onClick={() => onDelete(savedPost.id)}
+                    >
+                      <Trash2 size={16} />
+                      Remover
+                    </button>
+                  </>
+                }
+              />
+              <SavedPostScheduler
+                post={savedPost}
+                socialAccounts={socialAccounts}
+                onPublishNow={onPublishNow}
+                onSchedule={onSchedule}
+              />
             </div>
-          </div>
-          <PostCard
-            compact
-            label="Post salvo"
-            option={savedPost.post}
-            extraActions={
-              <>
-                <button
-                  className={clsx("favorite-button", savedPost.isFavorite && "active")}
-                  type="button"
-                  onClick={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
-                >
-                  <Star size={16} />
-                  {savedPost.isFavorite ? "Favorito" : "Favoritar"}
-                </button>
-                <button
-                  className="remove-button"
-                  type="button"
-                  onClick={() => onDelete(savedPost.id)}
-                >
-                  <Trash2 size={16} />
-                  Remover
-                </button>
-              </>
-            }
-          />
-          <SavedPostScheduler
-            post={savedPost}
-            socialAccounts={socialAccounts}
-            onPublishNow={onPublishNow}
-            onSchedule={onSchedule}
-          />
-        </div>
           ))}
         </div>
       )}
@@ -1183,6 +1189,16 @@ function ScheduleModal({
   const [localDateTime, setLocalDateTime] = useState(dateTime);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setLocalAccountId((current) => {
+      if (current && accounts.some((account) => account.id === current)) {
+        return current;
+      }
+
+      return selectedAccountId || accounts[0]?.id || "";
+    });
+  }, [accounts, selectedAccountId]);
+
   async function confirmSchedule() {
     setLocalError(null);
 
@@ -1223,8 +1239,13 @@ function ScheduleModal({
             <select
               value={localAccountId}
               onChange={(event) => setLocalAccountId(event.target.value)}
+              disabled={accounts.length === 0}
             >
-              <option value="">Selecione uma conta</option>
+              <option value="">
+                {accounts.length === 0
+                  ? "Nenhuma conta conectada"
+                  : "Selecione uma conta"}
+              </option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   @{account.instagram_username || account.page_name || "instagram"}
@@ -1385,14 +1406,14 @@ function ScheduledPostsPanel({
     (post) => post.status === "published"
   ).length;
 
-  if (posts.length === 0) {
+  if (accountTabs.length === 0) {
     return (
       <div className="empty-state">
         <div className="empty-icon">
           <CalendarClock size={30} />
         </div>
-        <h3>Nenhum post agendado.</h3>
-        <p>Gere um post, escolha uma conta do Instagram e defina o horario.</p>
+        <h3>Nenhuma conta conectada.</h3>
+        <p>Conecte uma conta do Instagram para organizar seus agendamentos.</p>
       </div>
     );
   }
@@ -1503,7 +1524,7 @@ function buildScheduleAccountTabs(
     });
   });
 
-  return Array.from(accountMap.values()).filter((account) => account.count > 0);
+  return Array.from(accountMap.values());
 }
 
 function UsagePanel({

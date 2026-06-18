@@ -59,6 +59,7 @@ Inputs esperados:
   "tema": "...",
   "contexto": "...",
   "possui_imagem_propria": true,
+  "imagem_do_usuario": "data:image/...",
   "analise_da_imagem_do_usuario": "..."
 }
 
@@ -68,9 +69,9 @@ Respeite rigorosamente a imagem enviada pelo usuario, conforme descrita em "anal
 Conecte a foto, o tema e o contexto a uma abordagem viral, magnetica e pronta para Instagram.
 
 Geracao de imagem:
-Como o usuario ja enviou uma foto propria, voce NAO deve criar imagem do zero.
+Como o usuario ja enviou uma foto propria, voce NAO deve criar imagem do zero e nao deve ignorar a imagem enviada.
 
-Em vez disso, sugira texto de sobreposicao, hierarquia visual e elementos graficos que o backend possa aplicar por cima da foto do usuario.
+Em vez disso, sugira texto de sobreposicao, hierarquia visual e elementos graficos que o backend possa aplicar ou editar por cima da foto do usuario.
 
 As instrucoes de overlay devem:
 - Informar o texto principal da sobreposicao.

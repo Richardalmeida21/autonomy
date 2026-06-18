@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+const imageDataUrlSchema = z
+  .string()
+  .regex(
+    /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/,
+    "Envie uma imagem valida em PNG, JPG ou WebP."
+  )
+  .max(8 * 1024 * 1024, "A imagem enviada deve ter no maximo 8MB.");
+
 const creativeInputSchema = z
   .object({
     modo: z.literal("criativo"),
@@ -61,6 +69,7 @@ export const postInputSchema = z.union([
     tema: z.string().trim().min(3, "Informe um tema."),
     contexto: z.string().trim().min(5, "Explique o contexto da campanha."),
     possui_imagem_propria: z.literal(true),
+    imagem_do_usuario: imageDataUrlSchema,
     analise_da_imagem_do_usuario: z
       .string()
       .trim()
