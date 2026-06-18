@@ -1184,6 +1184,8 @@ function SavedPostScheduler({
     socialAccounts[0]?.id || ""
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSchedulingPost, setIsSchedulingPost] = useState(false);
+  const [isPublishingPost, setIsPublishingPost] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1191,6 +1193,10 @@ function SavedPostScheduler({
   }, [socialAccounts]);
 
   async function schedule(nextSocialAccountId: string, nextDateTime: string) {
+    if (isSchedulingPost) {
+      return;
+    }
+
     setMessage(null);
 
     if (!nextSocialAccountId) {
@@ -1203,13 +1209,23 @@ function SavedPostScheduler({
       return;
     }
 
-    setSocialAccountId(nextSocialAccountId);
-    setDateTime(nextDateTime);
-    await onSchedule(post, nextSocialAccountId, nextDateTime);
-    setIsModalOpen(false);
+    setIsSchedulingPost(true);
+
+    try {
+      setSocialAccountId(nextSocialAccountId);
+      setDateTime(nextDateTime);
+      await onSchedule(post, nextSocialAccountId, nextDateTime);
+      setIsModalOpen(false);
+    } finally {
+      setIsSchedulingPost(false);
+    }
   }
 
   async function publishNow() {
+    if (isPublishingPost) {
+      return;
+    }
+
     setMessage(null);
 
     if (!socialAccountId) {
@@ -1217,19 +1233,34 @@ function SavedPostScheduler({
       return;
     }
 
-    await onPublishNow(post, socialAccountId);
+    setIsPublishingPost(true);
+
+    try {
+      await onPublishNow(post, socialAccountId);
+    } finally {
+      setIsPublishingPost(false);
+    }
   }
 
   return (
     <div className="saved-post-scheduler">
       <div className="saved-post-scheduler-actions">
-        <button type="button" onClick={() => setIsModalOpen(true)}>
+        <button
+          type="button"
+          onClick={() => setIsModalOpen(true)}
+          disabled={isSchedulingPost || isPublishingPost}
+        >
           <CalendarClock size={16} />
           Agendar
         </button>
-        <button className="now" type="button" onClick={publishNow}>
+        <button
+          className="now"
+          type="button"
+          onClick={publishNow}
+          disabled={isSchedulingPost || isPublishingPost}
+        >
           <Send size={16} />
-          Publicar agora
+          {isPublishingPost ? "Publicando" : "Publicar agora"}
         </button>
       </div>
       {message && <span>{message}</span>}
@@ -1237,6 +1268,7 @@ function SavedPostScheduler({
         <ScheduleModal
           accounts={socialAccounts}
           dateTime={dateTime}
+          isSubmitting={isSchedulingPost}
           onClose={() => setIsModalOpen(false)}
           onConfirm={schedule}
           selectedAccountId={socialAccountId}
@@ -1266,6 +1298,8 @@ function ScheduleModal({
   );
   const [localDateTime, setLocalDateTime] = useState(dateTime);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isLocallySubmitting, setIsLocallySubmitting] = useState(false);
+  const isConfirming = isSubmitting || isLocallySubmitting;
 
   useEffect(() => {
     setLocalAccountId((current) => {
@@ -1278,6 +1312,10 @@ function ScheduleModal({
   }, [accounts, selectedAccountId]);
 
   async function confirmSchedule() {
+    if (isConfirming) {
+      return;
+    }
+
     setLocalError(null);
 
     if (!localAccountId) {
@@ -1290,11 +1328,27 @@ function ScheduleModal({
       return;
     }
 
-    await onConfirm(localAccountId, localDateTime);
+    setIsLocallySubmitting(true);
+
+    try {
+      await onConfirm(localAccountId, localDateTime);
+    } catch (caughtError) {
+      setLocalError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Nao foi possivel confirmar o agendamento."
+      );
+    } finally {
+      setIsLocallySubmitting(false);
+    }
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={isConfirming ? undefined : onClose}
+    >
       <div
         aria-modal="true"
         className="schedule-modal"
@@ -1306,7 +1360,12 @@ function ScheduleModal({
             <p className="eyebrow">Agendamento</p>
             <h3>Programar post</h3>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            disabled={isConfirming}
+          >
             X
           </button>
         </div>
@@ -1317,7 +1376,7 @@ function ScheduleModal({
             <select
               value={localAccountId}
               onChange={(event) => setLocalAccountId(event.target.value)}
-              disabled={accounts.length === 0}
+              disabled={accounts.length === 0 || isConfirming}
             >
               <option value="">
                 {accounts.length === 0
@@ -1337,6 +1396,7 @@ function ScheduleModal({
               type="datetime-local"
               value={localDateTime}
               onChange={(event) => setLocalDateTime(event.target.value)}
+              disabled={isConfirming}
             />
           </label>
         </div>
@@ -1344,17 +1404,22 @@ function ScheduleModal({
         {localError && <p className="error-message">{localError}</p>}
 
         <div className="schedule-modal-actions">
-          <button className="modal-cancel-button" type="button" onClick={onClose}>
+          <button
+            className="modal-cancel-button"
+            type="button"
+            onClick={onClose}
+            disabled={isConfirming}
+          >
             Cancelar
           </button>
           <button
             className="schedule-button"
             type="button"
             onClick={confirmSchedule}
-            disabled={isSubmitting}
+            disabled={isConfirming}
           >
             <CalendarClock size={16} />
-            Confirmar agendamento
+            {isConfirming ? "Agendando..." : "Confirmar agendamento"}
           </button>
         </div>
       </div>

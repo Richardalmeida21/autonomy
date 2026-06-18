@@ -169,6 +169,33 @@ export async function POST(request: Request) {
       parsedInput.data.post.post.hashtags
     );
 
+    if (!parsedInput.data.publishNow) {
+      const duplicateSchedule = await database.query(
+        `select id
+         from scheduled_posts
+         where user_id = $1
+           and social_account_id = $2
+           and scheduled_for = $3
+           and caption = $4
+           and status in ('pending', 'publishing')
+         limit 1`,
+        [
+          user.id,
+          parsedInput.data.socialAccountId,
+          scheduledFor.toISOString(),
+          publishCaption
+        ]
+      );
+
+      if (duplicateSchedule.rowCount && duplicateSchedule.rows[0]) {
+        return NextResponse.json({
+          id: duplicateSchedule.rows[0].id,
+          ok: true,
+          duplicate: true
+        });
+      }
+    }
+
     await database.query(
       `insert into scheduled_posts (
          id, user_id, saved_post_id, social_account_id, caption, media_urls,

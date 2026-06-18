@@ -2706,7 +2706,12 @@ textarea:focus {
 }
 
 .topbar-actions button:disabled,
-.card-header button:disabled {
+.card-header button:disabled,
+.saved-post-scheduler button:disabled,
+.schedule-modal-actions button:disabled,
+.schedule-modal-header button:disabled,
+.schedule-modal-fields select:disabled,
+.schedule-modal-fields input:disabled {
   cursor: not-allowed;
   opacity: 0.48;
   transform: none;
