@@ -18,6 +18,7 @@ export async function GET(request: Request) {
               instagram_username, token_expires_at, status, connected_at
        from social_accounts
        where user_id = $1
+        and status = 'connected'
        order by connected_at desc`,
       [user.id]
     );

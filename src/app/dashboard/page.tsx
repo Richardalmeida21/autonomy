@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Eye,
   ImagePlus,
   Library,
   LogOut,
@@ -290,7 +291,11 @@ export default function Home() {
 
     setSocialAccounts(accounts);
     setScheduledPosts(schedules);
-    setSelectedSocialAccountId((current) => current || accounts[0]?.id || "");
+    setSelectedSocialAccountId((current) =>
+      accounts.some((account) => account.id === current)
+        ? current
+        : accounts[0]?.id || ""
+    );
   }
 
   function fillExample() {
@@ -482,6 +487,10 @@ export default function Home() {
   async function removeSocialAccount(id: string) {
     try {
       await disconnectSocialAccount(id);
+      setSocialAccounts((current) =>
+        current.filter((account) => account.id !== id)
+      );
+      setSelectedSocialAccountId((current) => (current === id ? "" : current));
       await refreshSocialData();
     } catch {
       setScheduleError("Nao foi possivel desconectar a conta.");
@@ -1041,36 +1050,10 @@ function SavedPostsLibrary({
         <div className="library-list">
           {visiblePosts.map((savedPost) => (
             <div className="library-item" key={savedPost.id}>
-              <div className="library-item-header">
-                <div>
-                  <p className="eyebrow">{savedPost.nicho}</p>
-                  <h3>{savedPost.post.headline_da_imagem}</h3>
-                </div>
-              </div>
-              <PostCard
-                compact
-                label="Post salvo"
-                option={savedPost.post}
-                extraActions={
-                  <>
-                    <button
-                      className={clsx("favorite-button", savedPost.isFavorite && "active")}
-                      type="button"
-                      onClick={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
-                    >
-                      <Star size={16} />
-                      {savedPost.isFavorite ? "Favorito" : "Favoritar"}
-                    </button>
-                    <button
-                      className="remove-button"
-                      type="button"
-                      onClick={() => onDelete(savedPost.id)}
-                    >
-                      <Trash2 size={16} />
-                      Remover
-                    </button>
-                  </>
-                }
+              <LibraryPostPreview
+                onDelete={() => onDelete(savedPost.id)}
+                onFavorite={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
+                post={savedPost}
               />
               <SavedPostScheduler
                 post={savedPost}
@@ -1082,6 +1065,108 @@ function SavedPostsLibrary({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LibraryPostPreview({
+  onDelete,
+  onFavorite,
+  post
+}: {
+  onDelete: () => void | Promise<void>;
+  onFavorite: () => void | Promise<void>;
+  post: SavedPost;
+}) {
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const images = getPostImages(post.post);
+  const previewImage = images[0] || null;
+
+  return (
+    <>
+      <div className="library-preview">
+        <div className="library-item-header">
+          <div>
+            <p className="eyebrow">{post.nicho}</p>
+            <h3>{post.post.headline_da_imagem}</h3>
+          </div>
+          <div className="library-icon-actions">
+            <button
+              className={clsx("icon-favorite", post.isFavorite && "active")}
+              type="button"
+              onClick={onFavorite}
+              aria-label={post.isFavorite ? "Remover dos favoritos" : "Favoritar"}
+            >
+              <Star size={17} fill={post.isFavorite ? "currentColor" : "none"} />
+            </button>
+            <button
+              className="icon-remove"
+              type="button"
+              onClick={onDelete}
+              aria-label="Remover post"
+            >
+              <Trash2 size={17} />
+            </button>
+          </div>
+        </div>
+
+        <button
+          className="library-media-preview"
+          type="button"
+          onClick={() => setIsDetailOpen(true)}
+          aria-label="Ver post completo"
+        >
+          {previewImage ? (
+            <img src={previewImage} alt={post.post.headline_da_imagem} />
+          ) : (
+            <span>{post.post.headline_da_imagem}</span>
+          )}
+          {images.length > 1 && (
+            <span className="library-carousel-count">1/{images.length}</span>
+          )}
+          <span className="view-post-button">
+            <Eye size={15} />
+            Ver post
+          </span>
+        </button>
+      </div>
+
+      {isDetailOpen && (
+        <PostDetailModal
+          onClose={() => setIsDetailOpen(false)}
+          option={post.post}
+        />
+      )}
+    </>
+  );
+}
+
+function PostDetailModal({
+  onClose,
+  option
+}: {
+  onClose: () => void;
+  option: GeneratedPost["post"];
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        aria-modal="true"
+        className="post-detail-modal"
+        role="dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="schedule-modal-header">
+          <div>
+            <p className="eyebrow">Post salvo</p>
+            <h3>Post completo</h3>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar">
+            X
+          </button>
+        </div>
+        <PostCard label="Post completo" option={option} />
+      </div>
     </div>
   );
 }
@@ -1468,29 +1553,124 @@ function ScheduledPostsPanel({
       ) : (
         <div className="schedule-list">
           {visiblePosts.map((post) => (
-            <div className="schedule-item" key={post.id}>
-              <div>
-                <p className="eyebrow">
-                  @{post.instagram_username || post.page_name || "instagram"}
-                </p>
-                <h3>{formatDateTime(post.scheduled_for)}</h3>
-                <p>{post.caption}</p>
-                {post.error_message && <span>{post.error_message}</span>}
-              </div>
-              <div className="schedule-item-side">
-                <span className={clsx("status-pill", post.status)}>
-                  {getScheduleStatusLabel(post.status)}
-                </span>
-                {post.status === "pending" && (
-                  <button type="button" onClick={() => onCancel(post.id)}>
-                    Cancelar
-                  </button>
-                )}
-              </div>
-            </div>
+            <ScheduledPostCard key={post.id} post={post} onCancel={onCancel} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ScheduledPostCard({
+  onCancel,
+  post
+}: {
+  onCancel: (id: string) => void | Promise<void>;
+  post: ScheduledPost;
+}) {
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const previewImage = post.media_urls[0] || null;
+
+  return (
+    <>
+      <article className="schedule-card">
+        <div className="schedule-card-header">
+          <div>
+            <p className="eyebrow">
+              @{post.instagram_username || post.page_name || "instagram"}
+            </p>
+            <h3>{formatDateTime(post.scheduled_for)}</h3>
+          </div>
+          <span className={clsx("status-pill", post.status)}>
+            {getScheduleStatusLabel(post.status)}
+          </span>
+        </div>
+
+        <button
+          className="library-media-preview"
+          type="button"
+          onClick={() => setIsDetailOpen(true)}
+          aria-label="Ver post agendado"
+        >
+          {previewImage ? (
+            <img src={previewImage} alt="Midia do post agendado" />
+          ) : (
+            <span>Post agendado</span>
+          )}
+          {post.media_urls.length > 1 && (
+            <span className="library-carousel-count">
+              1/{post.media_urls.length}
+            </span>
+          )}
+          <span className="view-post-button">
+            <Eye size={15} />
+            Ver post
+          </span>
+        </button>
+
+        <div className="schedule-card-footer">
+          {post.error_message && <span>{post.error_message}</span>}
+          {post.status === "pending" && (
+            <button type="button" onClick={() => onCancel(post.id)}>
+              Cancelar
+            </button>
+          )}
+        </div>
+      </article>
+
+      {isDetailOpen && (
+        <ScheduledPostDetailModal
+          onClose={() => setIsDetailOpen(false)}
+          post={post}
+        />
+      )}
+    </>
+  );
+}
+
+function ScheduledPostDetailModal({
+  onClose,
+  post
+}: {
+  onClose: () => void;
+  post: ScheduledPost;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        aria-modal="true"
+        className="post-detail-modal"
+        role="dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="schedule-modal-header">
+          <div>
+            <p className="eyebrow">
+              @{post.instagram_username || post.page_name || "instagram"}
+            </p>
+            <h3>{formatDateTime(post.scheduled_for)}</h3>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar">
+            X
+          </button>
+        </div>
+
+        <div className="scheduled-detail-content">
+          <div className="scheduled-detail-media">
+            {post.media_urls.map((image, index) => (
+              <img
+                key={`${post.id}-${index}`}
+                src={image}
+                alt={`Midia ${index + 1} do post agendado`}
+              />
+            ))}
+          </div>
+          <div className="card-section">
+            <h3>Descricao</h3>
+            <p className="caption-text">{post.caption}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1747,6 +1927,14 @@ function sortSavedPosts(firstPost: SavedPost, secondPost: SavedPost) {
   );
 }
 
+function getPostImages(option: GeneratedPost["post"]) {
+  return option.generated_images.length > 0
+    ? option.generated_images
+    : option.generated_image
+      ? [option.generated_image]
+      : [];
+}
+
 function PostCard({
   compact = false,
   editable = false,
@@ -1764,12 +1952,7 @@ function PostCard({
 }) {
   const [copied, setCopied] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
-  const images =
-    option.generated_images.length > 0
-      ? option.generated_images
-      : option.generated_image
-        ? [option.generated_image]
-        : [];
+  const images = getPostImages(option);
 
   async function copyCaption() {
     await navigator.clipboard.writeText(
