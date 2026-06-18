@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { toFile } from "openai";
 import { getAutonomyPrompt } from "@/lib/autonomy-prompt";
+import { ensureCreditsSchema } from "@/lib/credits";
 import { getDatabase } from "@/lib/db";
 import { getGenerationModel, getImageModel, getOpenAIClient } from "@/lib/openai";
 import { getPlan, plans } from "@/lib/plans";
@@ -18,7 +19,6 @@ import { getUserFromRequest } from "@/lib/supabase-server";
 export const runtime = "nodejs";
 
 type QueryableDatabase = Pick<Pool | PoolClient, "query">;
-const STALE_RESERVATION_INTERVAL = "30 minutes";
 
 export async function POST(request: Request) {
   try {
@@ -59,6 +59,7 @@ export async function POST(request: Request) {
 
     const creditCost = getGenerationCreditCost(parsedInput.data);
     const database = getDatabase();
+    await ensureCreditsSchema(database);
     const client = getOpenAIClient();
     const systemPrompt = await getAutonomyPrompt();
     const reservationId = crypto.randomUUID();
@@ -79,10 +80,9 @@ export async function POST(request: Request) {
         creditCost
       });
 
-      await reserveUsageEvent({
+      await reserveCredits({
         database: transaction,
         creditCost,
-        reservationId,
         metadata: {
           mode: parsedInput.data.modo,
           niche: parsedInput.data.nicho,
@@ -96,6 +96,7 @@ export async function POST(request: Request) {
           credits_after: usage.usedCredits + creditCost,
           credits_limit: usage.creditLimit
         },
+        reservationId,
         userId: user.id
       });
 
@@ -117,6 +118,7 @@ export async function POST(request: Request) {
 
       await completeUsageReservation({
         database,
+        creditCost,
         generatedImages: generatedPost.post.generated_images.length,
         reservationId,
         userId: user.id
@@ -133,6 +135,7 @@ export async function POST(request: Request) {
       return NextResponse.json(generatedPost);
     } catch (error) {
       await refundUsageReservation({
+        creditCost,
         database,
         reservationId,
         userId: user.id
@@ -471,23 +474,24 @@ async function assertGenerationAllowed({
   }
 
   const usageResult = await database.query(
-    `select coalesce(sum(credits_used), 0)::int as used_credits
-     from usage_events
-     where user_id = $1
-       and created_at >= date_trunc('month', now())
-       and not (
-         metadata->>'status' = 'reserved'
-         and created_at < now() - $2::interval
-       )`,
-    [userId, STALE_RESERVATION_INTERVAL]
+    `select
+       coalesce(credits_used, 0)::int as used_credits,
+       coalesce(credits_reserved, 0)::int as reserved_credits,
+       coalesce(credits_limit, $2)::int as credits_limit
+     from profiles
+     where id = $1`,
+    [userId, plans[1].creditLimit]
   );
   const usedCredits = Number(usageResult.rows[0]?.used_credits || 0);
-  const creditLimit = Number(profile.credits_limit || plans[1].creditLimit);
+  const reservedCredits = Number(usageResult.rows[0]?.reserved_credits || 0);
+  const creditLimit = Number(
+    usageResult.rows[0]?.credits_limit || profile.credits_limit || plans[1].creditLimit
+  );
 
-  if (usedCredits + creditCost > creditLimit) {
+  if (usedCredits + reservedCredits + creditCost > creditLimit) {
     throw new Error(
       `Creditos insuficientes. Este post usa ${creditCost} credito(s), voce tem ${Math.max(
-        creditLimit - usedCredits,
+        creditLimit - usedCredits - reservedCredits,
         0
       )} restante(s).`
     );
@@ -501,7 +505,7 @@ async function assertGenerationAllowed({
     throw new Error("Carrossel limitado a 4 imagens.");
   }
 
-  return { creditLimit, usedCredits };
+  return { creditLimit, usedCredits: usedCredits + reservedCredits };
 }
 
 function getImageQuality() {
@@ -586,7 +590,7 @@ async function ensureProfile({
   };
 }
 
-async function reserveUsageEvent({
+async function reserveCredits({
   creditCost,
   database,
   metadata,
@@ -599,6 +603,13 @@ async function reserveUsageEvent({
   reservationId: string;
   userId: string;
 }) {
+  await database.query(
+    `update profiles
+     set credits_reserved = credits_reserved + $2
+     where id = $1`,
+    [userId, creditCost]
+  );
+
   await database.query(
     `insert into usage_events (user_id, event_type, credits_used, metadata)
      values ($1, $2, $3, $4)`,
@@ -615,62 +626,109 @@ async function reserveUsageEvent({
 }
 
 async function completeUsageReservation({
+  creditCost,
   database,
   generatedImages,
   reservationId,
   userId
 }: {
-  database: QueryableDatabase;
+  creditCost: number;
+  database: Pool;
   generatedImages: number;
   reservationId: string;
   userId: string;
 }) {
-  const result = await database.query(
-    `update usage_events
-     set metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
-     where user_id = $1
-       and metadata->>'reservation_id' = $2`,
-    [
-      userId,
-      reservationId,
-      JSON.stringify({
-        completed_at: new Date().toISOString(),
-        generated_images: generatedImages,
-        status: "completed"
-      })
-    ]
-  );
+  const transaction = await database.connect();
 
-  if (result.rowCount === 0) {
-    throw new Error("Nao foi possivel confirmar o uso de creditos.");
+  try {
+    await transaction.query("begin");
+    await lockUserCredits({ database: transaction, userId });
+
+    const profileUpdate = await transaction.query(
+      `update profiles
+       set credits_reserved = greatest(credits_reserved - $2, 0),
+           credits_used = credits_used + $2
+       where id = $1`,
+      [userId, creditCost]
+    );
+
+    const eventUpdate = await transaction.query(
+      `update usage_events
+       set metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
+       where user_id = $1
+         and metadata->>'reservation_id' = $2`,
+      [
+        userId,
+        reservationId,
+        JSON.stringify({
+          completed_at: new Date().toISOString(),
+          generated_images: generatedImages,
+          status: "completed"
+        })
+      ]
+    );
+
+    if (profileUpdate.rowCount === 0 || eventUpdate.rowCount === 0) {
+      throw new Error("Nao foi possivel confirmar o uso de creditos.");
+    }
+
+    await transaction.query("commit");
+  } catch (error) {
+    await transaction.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    transaction.release();
   }
 }
 
 async function refundUsageReservation({
+  creditCost,
   database,
   reservationId,
   userId
 }: {
-  database: QueryableDatabase;
+  creditCost: number;
+  database: Pool;
   reservationId: string;
   userId: string;
 }) {
-  await database.query(
-    `update usage_events
-     set credits_used = 0,
-         metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
-     where user_id = $1
-       and metadata->>'reservation_id' = $2
-       and metadata->>'status' = 'reserved'`,
-    [
-      userId,
-      reservationId,
-      JSON.stringify({
-        refunded_at: new Date().toISOString(),
-        status: "refunded"
-      })
-    ]
-  );
+  const transaction = await database.connect();
+
+  try {
+    await transaction.query("begin");
+    await lockUserCredits({ database: transaction, userId });
+
+    await transaction.query(
+      `update profiles
+       set credits_reserved = greatest(credits_reserved - $2, 0)
+       where id = $1`,
+      [userId, creditCost]
+    );
+
+    await transaction.query(
+      `update usage_events
+       set credits_used = 0,
+           metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
+       where user_id = $1
+         and metadata->>'reservation_id' = $2
+         and metadata->>'status' = 'reserved'`,
+      [
+        userId,
+        reservationId,
+        JSON.stringify({
+          refunded_at: new Date().toISOString(),
+          status: "refunded"
+        })
+      ]
+    );
+
+    await transaction.query("commit");
+  } catch (error) {
+    await transaction.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    transaction.release();
+  }
 }
 
 function getErrorStatus(message: string) {
