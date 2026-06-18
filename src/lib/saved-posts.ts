@@ -66,6 +66,23 @@ export async function updatePostFavorite(id: string, isFavorite: boolean) {
   }
 }
 
+export async function updateSavedPost(id: string, post: GeneratedPost) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`/api/posts/${id}`, {
+    method: "PATCH",
+    headers: {
+      ...headers,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ post })
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Nao foi possivel salvar as alteracoes.");
+  }
+}
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const supabase = getSupabaseClient();
   let { data } = await supabase.auth.getSession();

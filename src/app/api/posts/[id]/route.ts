@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDatabase } from "@/lib/db";
+import { generatedPostZodSchema } from "@/lib/post-schema";
 import { getUserFromRequest } from "@/lib/supabase-server";
 
 const paramsSchema = z.object({
@@ -10,7 +11,8 @@ const paramsSchema = z.object({
 export const runtime = "nodejs";
 
 const updatePostSchema = z.object({
-  isFavorite: z.boolean()
+  isFavorite: z.boolean().optional(),
+  post: generatedPostZodSchema.optional()
 });
 
 export async function PATCH(
@@ -37,13 +39,31 @@ export async function PATCH(
       return NextResponse.json({ error: "Atualizacao invalida." }, { status: 400 });
     }
 
+    if (
+      typeof parsedBody.data.isFavorite === "undefined" &&
+      typeof parsedBody.data.post === "undefined"
+    ) {
+      return NextResponse.json({ error: "Nada para atualizar." }, { status: 400 });
+    }
+
     const database = getDatabase();
-    await database.query(
+    const result = await database.query(
       `update saved_posts
-       set is_favorite = $3
+       set
+         is_favorite = coalesce($3, is_favorite),
+         payload = coalesce($4::jsonb, payload)
        where id = $1 and user_id = $2`,
-      [params.data.id, user.id, parsedBody.data.isFavorite]
+      [
+        params.data.id,
+        user.id,
+        parsedBody.data.isFavorite,
+        parsedBody.data.post ? JSON.stringify(parsedBody.data.post) : null
+      ]
     );
+
+    if (result.rowCount === 0) {
+      return NextResponse.json({ error: "Post nao encontrado." }, { status: 404 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

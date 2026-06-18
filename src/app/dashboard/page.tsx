@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
@@ -33,6 +33,7 @@ import {
   getSavedPosts,
   savePost,
   updatePostFavorite,
+  updateSavedPost,
   type SavedPost
 } from "@/lib/saved-posts";
 import {
@@ -97,6 +98,7 @@ export default function Home() {
   const [imageAnalysis, setImageAnalysis] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [result, setResult] = useState<GeneratedPost | null>(null);
+  const [currentSavedPostId, setCurrentSavedPostId] = useState<string | null>(null);
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
   const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
@@ -119,6 +121,8 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isPublishingNow, setIsPublishingNow] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
+  const generatedPostSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedGeneratedSignature = useRef("");
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -205,6 +209,14 @@ export default function Home() {
     refreshUsageSummary().catch(() => undefined);
     refreshSocialData().catch(() => undefined);
   }, [language]);
+
+  useEffect(() => {
+    return () => {
+      if (generatedPostSaveTimer.current) {
+        clearTimeout(generatedPostSaveTimer.current);
+      }
+    };
+  }, []);
 
   const activePlan = getPlan(profile.plan) || plans[1];
   const creditLimit = usageSummary?.creditsLimit ?? activePlan.creditLimit;
@@ -427,7 +439,36 @@ export default function Home() {
     };
 
     await savePost(savedPost);
+    setCurrentSavedPostId(savedPost.id);
+    lastSavedGeneratedSignature.current = getPostSignature(generatedPost);
     setSavedPosts((current) => [savedPost, ...current]);
+  }
+
+  function queueGeneratedPostSave(id: string, generatedPost: GeneratedPost) {
+    const signature = getPostSignature(generatedPost);
+
+    if (signature === lastSavedGeneratedSignature.current) {
+      return;
+    }
+
+    if (generatedPostSaveTimer.current) {
+      clearTimeout(generatedPostSaveTimer.current);
+    }
+
+    generatedPostSaveTimer.current = setTimeout(async () => {
+      try {
+        await updateSavedPost(id, generatedPost);
+        lastSavedGeneratedSignature.current = signature;
+      } catch {
+        setError(
+          tx(
+            language,
+            "Não foi possível salvar as alterações do post automaticamente.",
+            "Could not automatically save the post changes."
+          )
+        );
+      }
+    }, 700);
   }
 
   async function connectInstagram() {
@@ -597,15 +638,94 @@ export default function Home() {
   }
 
   function updateGeneratedPost(nextPost: GeneratedPost["post"]) {
-    setResult((current) =>
-      current ? { ...current, post: nextPost } : current
+    setResult((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextResult = { ...current, post: nextPost };
+
+      if (currentSavedPostId) {
+        setSavedPosts((posts) =>
+          posts.map((savedPost) =>
+            savedPost.id === currentSavedPostId
+              ? {
+                  ...savedPost,
+                  modo_executado: nextResult.modo_executado,
+                  nicho: nextResult.nicho,
+                  formato_visual: nextResult.formato_visual,
+                  post: nextResult.post
+                }
+              : savedPost
+          )
+        );
+        queueGeneratedPostSave(currentSavedPostId, nextResult);
+      }
+
+      return nextResult;
+    });
+  }
+
+  async function updateSavedPostContent(id: string, nextPost: GeneratedPost["post"]) {
+    const previousPosts = savedPosts;
+    const previousResult = result;
+    const previousSignature = lastSavedGeneratedSignature.current;
+    const currentPost = savedPosts.find((post) => post.id === id);
+
+    if (!currentPost) {
+      return;
+    }
+
+    const updatedPost: SavedPost = {
+      ...currentPost,
+      post: nextPost
+    };
+
+    setSavedPosts((posts) =>
+      posts.map((post) => (post.id === id ? updatedPost : post))
     );
+
+    if (currentSavedPostId === id) {
+      const updatedGeneratedPost: GeneratedPost = {
+        modo_executado: updatedPost.modo_executado,
+        nicho: updatedPost.nicho,
+        formato_visual: updatedPost.formato_visual,
+        post: updatedPost.post
+      };
+      setResult(updatedGeneratedPost);
+      lastSavedGeneratedSignature.current = getPostSignature(updatedGeneratedPost);
+    }
+
+    try {
+      await updateSavedPost(id, {
+        modo_executado: updatedPost.modo_executado,
+        nicho: updatedPost.nicho,
+        formato_visual: updatedPost.formato_visual,
+        post: updatedPost.post
+      });
+    } catch (caughtError) {
+      setSavedPosts(previousPosts);
+      if (currentSavedPostId === id) {
+        setResult(previousResult);
+        lastSavedGeneratedSignature.current = previousSignature;
+      }
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : tx(language, "Não foi possível salvar as alterações.", "Could not save the changes.")
+      );
+      throw caughtError;
+    }
   }
 
   async function deleteSavedPost(id: string) {
     try {
       await deletePost(id);
       setSavedPosts(savedPosts.filter((post) => post.id !== id));
+      if (currentSavedPostId === id) {
+        setCurrentSavedPostId(null);
+        setResult(null);
+      }
     } catch {
       setError(tx(language, "Não foi possível remover este post da biblioteca.", "Could not remove this post from the library."));
     }
@@ -1042,6 +1162,7 @@ export default function Home() {
               onFavorite={toggleSavedPostFavorite}
               onPublishNow={publishSavedPostNow}
               onSchedule={scheduleSavedPost}
+              onUpdate={updateSavedPostContent}
               posts={savedPosts}
               socialAccounts={socialAccounts}
               onDelete={deleteSavedPost}
@@ -1101,6 +1222,7 @@ function SavedPostsLibrary({
   onFavorite,
   onPublishNow,
   onSchedule,
+  onUpdate,
   socialAccounts,
   posts
 }: {
@@ -1114,6 +1236,7 @@ function SavedPostsLibrary({
     socialAccountId: string,
     dateTime: string
   ) => void | Promise<void>;
+  onUpdate: (id: string, nextPost: GeneratedPost["post"]) => void | Promise<void>;
   socialAccounts: SocialAccount[];
   posts: SavedPost[];
 }) {
@@ -1186,6 +1309,7 @@ function SavedPostsLibrary({
               <LibraryPostPreview
                 onDelete={() => onDelete(savedPost.id)}
                 onFavorite={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
+                onUpdate={onUpdate}
                 language={language}
                 post={savedPost}
               />
@@ -1208,11 +1332,13 @@ function LibraryPostPreview({
   language,
   onDelete,
   onFavorite,
+  onUpdate,
   post
 }: {
   language: Language;
   onDelete: () => void | Promise<void>;
   onFavorite: () => void | Promise<void>;
+  onUpdate: (id: string, nextPost: GeneratedPost["post"]) => void | Promise<void>;
   post: SavedPost;
 }) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -1271,8 +1397,9 @@ function LibraryPostPreview({
       {isDetailOpen && (
         <PostDetailModal
           onClose={() => setIsDetailOpen(false)}
+          onSave={onUpdate}
           language={language}
-          option={post.post}
+          post={post}
         />
       )}
     </>
@@ -1282,12 +1409,46 @@ function LibraryPostPreview({
 function PostDetailModal({
   language,
   onClose,
-  option
+  onSave,
+  post
 }: {
   language: Language;
   onClose: () => void;
-  option: GeneratedPost["post"];
+  onSave: (id: string, nextPost: GeneratedPost["post"]) => void | Promise<void>;
+  post: SavedPost;
 }) {
+  const [draftPost, setDraftPost] = useState(post.post);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const hasChanges = getPostOptionSignature(draftPost) !== getPostOptionSignature(post.post);
+
+  useEffect(() => {
+    setDraftPost(post.post);
+  }, [post.post]);
+
+  async function saveChanges() {
+    if (!hasChanges || isSaving) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveMessage(null);
+
+    try {
+      await onSave(post.id, draftPost);
+      setSaveMessage(tx(language, "Alterações salvas.", "Changes saved."));
+    } catch {
+      setSaveMessage(tx(language, "Não foi possível salvar as alterações.", "Could not save changes."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function discardChanges() {
+    setDraftPost(post.post);
+    setSaveMessage(null);
+  }
+
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <div
@@ -1305,7 +1466,37 @@ function PostDetailModal({
             X
           </button>
         </div>
-        <PostCard language={language} label={tx(language, "Post completo", "Complete post")} option={option} />
+        <PostCard
+          editable
+          language={language}
+          label={tx(language, "Post completo", "Complete post")}
+          option={draftPost}
+          onChange={setDraftPost}
+        />
+        {(hasChanges || saveMessage) && (
+          <div className="post-edit-actions" role="status">
+            <span>
+              {saveMessage ||
+                tx(
+                  language,
+                  "Você editou este post. Salve para atualizar biblioteca, agenda e publicação.",
+                  "You edited this post. Save to update the library, schedule, and publishing."
+                )}
+            </span>
+            {hasChanges && (
+              <div>
+                <button type="button" onClick={discardChanges} disabled={isSaving}>
+                  {tx(language, "Descartar alterações", "Discard changes")}
+                </button>
+                <button className="primary" type="button" onClick={saveChanges} disabled={isSaving}>
+                  {isSaving
+                    ? tx(language, "Salvando", "Saving")
+                    : tx(language, "Salvar alterações", "Save changes")}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2178,6 +2369,25 @@ function sortSavedPosts(firstPost: SavedPost, secondPost: SavedPost) {
     new Date(secondPost.createdAt).getTime() -
     new Date(firstPost.createdAt).getTime()
   );
+}
+
+function getPostSignature(post: GeneratedPost) {
+  return JSON.stringify({
+    formato_visual: post.formato_visual,
+    modo_executado: post.modo_executado,
+    nicho: post.nicho,
+    post: post.post
+  });
+}
+
+function getPostOptionSignature(option: GeneratedPost["post"]) {
+  return JSON.stringify({
+    caption: option.caption,
+    hashtags: option.hashtags,
+    headline_da_imagem: option.headline_da_imagem,
+    generated_image: option.generated_image,
+    generated_images: option.generated_images
+  });
 }
 
 function getPostImages(option: GeneratedPost["post"]) {

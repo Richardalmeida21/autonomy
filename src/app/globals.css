@@ -2659,6 +2659,55 @@ textarea:focus {
   box-shadow: none;
 }
 
+.post-detail-modal .caption-editor {
+  min-height: 150px;
+}
+
+.post-edit-actions {
+  position: sticky;
+  bottom: -22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 -22px -22px;
+  border-top: 1px solid var(--line);
+  padding: 14px 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -10px 28px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.post-edit-actions span {
+  color: #475569;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.post-edit-actions div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.post-edit-actions button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #475569;
+  font-weight: 800;
+}
+
+.post-edit-actions button.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.18);
+}
+
 .schedule-modal-header {
   display: flex;
   align-items: flex-start;
