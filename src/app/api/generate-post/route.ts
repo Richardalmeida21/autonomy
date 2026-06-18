@@ -4,6 +4,7 @@ import { getDatabase } from "@/lib/db";
 import { getGenerationModel, getImageModel, getOpenAIClient } from "@/lib/openai";
 import { getPlan, plans } from "@/lib/plans";
 import { uploadPostImages } from "@/lib/post-images";
+import type { PoolClient, Pool } from "pg";
 import {
   generatedPostSchema,
   generatedPostZodSchema,
@@ -13,6 +14,8 @@ import {
 import { getUserFromRequest } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
+
+type QueryableDatabase = Pick<Pool | PoolClient, "query">;
 
 export async function POST(request: Request) {
   try {
@@ -36,134 +39,58 @@ export async function POST(request: Request) {
     }
 
     const creditCost = getGenerationCreditCost(parsedInput.data);
-    const usage = await assertGenerationAllowed({
-      userId: user.id,
-      email: user.email || "",
-      metadata: user.user_metadata,
-      input: parsedInput.data,
-      creditCost
-    });
-
     const client = getOpenAIClient();
     const systemPrompt = await getAutonomyPrompt();
+    const database = getDatabase();
+    const transaction = await database.connect();
 
-    const response = await client.responses.create({
-      model: getGenerationModel(),
-      store: false,
-      instructions: systemPrompt,
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: JSON.stringify(parsedInput.data, null, 2)
-            }
-          ]
+    try {
+      await transaction.query("begin");
+      await lockUserCredits({ database: transaction, userId: user.id });
+
+      const usage = await assertGenerationAllowed({
+        database: transaction,
+        userId: user.id,
+        email: user.email || "",
+        metadata: user.user_metadata,
+        input: parsedInput.data,
+        creditCost
+      });
+
+      const generatedPost = await generatePost({
+        client,
+        input: parsedInput.data,
+        systemPrompt,
+        userId: user.id
+      });
+
+      await recordUsageEvent({
+        database: transaction,
+        userId: user.id,
+        creditCost,
+        metadata: {
+          mode: parsedInput.data.modo,
+          niche: parsedInput.data.nicho,
+          theme: parsedInput.data.tema,
+          visual_format:
+            parsedInput.data.modo === "criativo"
+              ? parsedInput.data.formato_visual
+              : "contextual",
+          generated_images: generatedPost.post.generated_images.length,
+          credits_before: usage.usedCredits,
+          credits_after: usage.usedCredits + creditCost,
+          credits_limit: usage.creditLimit
         }
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "autonomy_instagram_post_options",
-          strict: true,
-          schema: generatedPostSchema
-        }
-      }
-    });
+      });
 
-    const outputText = response.output_text;
-
-    if (!outputText) {
-      return NextResponse.json(
-        { error: "A IA nao retornou conteudo utilizavel." },
-        { status: 502 }
-      );
+      await transaction.query("commit");
+      return NextResponse.json(generatedPost);
+    } catch (error) {
+      await transaction.query("rollback").catch(() => undefined);
+      throw error;
+    } finally {
+      transaction.release();
     }
-
-    const parsedOutput = generatedPostZodSchema.safeParse(JSON.parse(outputText));
-
-    if (!parsedOutput.success) {
-      return NextResponse.json(
-        {
-          error: "A IA retornou um formato inesperado.",
-          issues: parsedOutput.error.flatten().fieldErrors
-        },
-        { status: 502 }
-      );
-    }
-
-    const generatedPost = parsedOutput.data;
-
-    if (parsedInput.data.modo === "criativo") {
-      generatedPost.formato_visual = parsedInput.data.formato_visual;
-
-      if (parsedInput.data.formato_visual === "imagem_unica") {
-        const image = await generateImageForOption({
-          prompt: generatedPost.post.image_generation_prompt,
-          headline: generatedPost.post.headline_da_imagem,
-          visualDetail: parsedInput.data.detalhes_imagem || "",
-          client
-        });
-
-        generatedPost.post.generated_image = image;
-        generatedPost.post.generated_images = image ? [image] : [];
-      }
-
-      if (parsedInput.data.formato_visual === "carrossel") {
-        const details = parsedInput.data.detalhes_carrossel || [];
-        const totalSlides = details.length;
-        const images = await Promise.all(
-          details.map((visualDetail, index) =>
-            generateImageForOption({
-              prompt: generatedPost.post.image_generation_prompt,
-              headline: generatedPost.post.headline_da_imagem,
-              visualDetail,
-              carouselPosition: index + 1,
-              carouselTotal: totalSlides,
-              isCarousel: true,
-              client
-            })
-          )
-        );
-
-        generatedPost.post.generated_images = images.filter(
-          (image): image is string => Boolean(image)
-        );
-        generatedPost.post.generated_image =
-          generatedPost.post.generated_images[0] || null;
-      }
-
-      if (generatedPost.post.generated_images.length > 0) {
-        const imageUrls = await uploadPostImages({
-          images: generatedPost.post.generated_images,
-          postId: crypto.randomUUID(),
-          userId: user.id
-        });
-
-        generatedPost.post.generated_images = imageUrls;
-        generatedPost.post.generated_image = imageUrls[0] || null;
-      }
-    }
-
-    await recordUsageEvent({
-      userId: user.id,
-      creditCost,
-      metadata: {
-        mode: parsedInput.data.modo,
-        niche: parsedInput.data.nicho,
-        theme: parsedInput.data.tema,
-        visual_format:
-          parsedInput.data.modo === "criativo"
-            ? parsedInput.data.formato_visual
-            : "contextual",
-        generated_images: generatedPost.post.generated_images.length,
-        credits_before: usage.usedCredits,
-        credits_limit: usage.creditLimit
-      }
-    });
-
-    return NextResponse.json(generatedPost);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Erro inesperado ao gerar post.";
@@ -176,6 +103,110 @@ export async function POST(request: Request) {
       { status }
     );
   }
+}
+
+async function generatePost({
+  client,
+  input,
+  systemPrompt,
+  userId
+}: {
+  client: ReturnType<typeof getOpenAIClient>;
+  input: PostInput;
+  systemPrompt: string;
+  userId: string;
+}) {
+  const response = await client.responses.create({
+    model: getGenerationModel(),
+    store: false,
+    instructions: systemPrompt,
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: JSON.stringify(input, null, 2)
+          }
+        ]
+      }
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "autonomy_instagram_post_options",
+        strict: true,
+        schema: generatedPostSchema
+      }
+    }
+  });
+
+  const outputText = response.output_text;
+
+  if (!outputText) {
+    throw new Error("A IA nao retornou conteudo utilizavel.");
+  }
+
+  const parsedOutput = generatedPostZodSchema.safeParse(JSON.parse(outputText));
+
+  if (!parsedOutput.success) {
+    throw new Error("A IA retornou um formato inesperado.");
+  }
+
+  const generatedPost = parsedOutput.data;
+
+  if (input.modo === "criativo") {
+    generatedPost.formato_visual = input.formato_visual;
+
+    if (input.formato_visual === "imagem_unica") {
+      const image = await generateImageForOption({
+        prompt: generatedPost.post.image_generation_prompt,
+        headline: generatedPost.post.headline_da_imagem,
+        visualDetail: input.detalhes_imagem || "",
+        client
+      });
+
+      generatedPost.post.generated_image = image;
+      generatedPost.post.generated_images = image ? [image] : [];
+    }
+
+    if (input.formato_visual === "carrossel") {
+      const details = input.detalhes_carrossel || [];
+      const totalSlides = details.length;
+      const images = await Promise.all(
+        details.map((visualDetail, index) =>
+          generateImageForOption({
+            prompt: generatedPost.post.image_generation_prompt,
+            headline: generatedPost.post.headline_da_imagem,
+            visualDetail,
+            carouselPosition: index + 1,
+            carouselTotal: totalSlides,
+            isCarousel: true,
+            client
+          })
+        )
+      );
+
+      generatedPost.post.generated_images = images.filter(
+        (image): image is string => Boolean(image)
+      );
+      generatedPost.post.generated_image =
+        generatedPost.post.generated_images[0] || null;
+    }
+
+    if (generatedPost.post.generated_images.length > 0) {
+      const imageUrls = await uploadPostImages({
+        images: generatedPost.post.generated_images,
+        postId: crypto.randomUUID(),
+        userId
+      });
+
+      generatedPost.post.generated_images = imageUrls;
+      generatedPost.post.generated_image = imageUrls[0] || null;
+    }
+  }
+
+  return generatedPost;
 }
 
 async function generateImageForOption({
@@ -261,18 +292,19 @@ function getGenerationCreditCost(input: PostInput) {
 
 async function assertGenerationAllowed({
   creditCost,
+  database,
   email,
   input,
   metadata,
   userId
 }: {
   creditCost: number;
+  database: QueryableDatabase;
   email: string;
   input: PostInput;
   metadata: Record<string, unknown>;
   userId: string;
 }) {
-  const database = getDatabase();
   const profile = await ensureProfile({
     database,
     email,
@@ -318,6 +350,18 @@ async function assertGenerationAllowed({
   return { creditLimit, usedCredits };
 }
 
+async function lockUserCredits({
+  database,
+  userId
+}: {
+  database: QueryableDatabase;
+  userId: string;
+}) {
+  await database.query("select pg_advisory_xact_lock(hashtext($1))", [
+    `credits:${userId}`
+  ]);
+}
+
 async function ensureProfile({
   database,
   email,
@@ -325,7 +369,7 @@ async function ensureProfile({
   planId,
   userId
 }: {
-  database: ReturnType<typeof getDatabase>;
+  database: QueryableDatabase;
   email: string;
   metadata: Record<string, unknown>;
   planId: string;
@@ -375,15 +419,15 @@ async function ensureProfile({
 
 async function recordUsageEvent({
   creditCost,
+  database,
   metadata,
   userId
 }: {
   creditCost: number;
+  database: QueryableDatabase;
   metadata: Record<string, unknown>;
   userId: string;
 }) {
-  const database = getDatabase();
-
   await database.query(
     `insert into usage_events (user_id, event_type, credits_used, metadata)
      values ($1, $2, $3, $4)`,

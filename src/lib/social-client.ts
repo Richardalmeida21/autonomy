@@ -17,6 +17,7 @@ export type SocialAccount = {
 export type ScheduledPost = {
   id: string;
   saved_post_id: string | null;
+  social_account_id: string;
   caption: string;
   media_urls: string[];
   scheduled_for: string;

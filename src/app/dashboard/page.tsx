@@ -93,6 +93,7 @@ export default function Home() {
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
   const [selectedSocialAccountId, setSelectedSocialAccountId] = useState("");
   const [scheduleDateTime, setScheduleDateTime] = useState("");
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [profile, setProfile] = useState<DashboardProfile>({
     email: "",
     emailConfirmed: false,
@@ -353,7 +354,7 @@ export default function Home() {
     }
   }
 
-  async function scheduleCurrentPost() {
+  async function scheduleCurrentPost(socialAccountId: string, dateTime: string) {
     if (!result) {
       return;
     }
@@ -363,21 +364,24 @@ export default function Home() {
     setIsScheduling(true);
 
     try {
-      if (!selectedSocialAccountId) {
+      if (!socialAccountId) {
         throw new Error("Conecte e selecione uma conta do Instagram.");
       }
 
-      if (!scheduleDateTime) {
+      if (!dateTime) {
         throw new Error("Escolha data e horario para publicar.");
       }
 
       await schedulePost({
         post: result,
-        scheduledFor: new Date(scheduleDateTime).toISOString(),
-        socialAccountId: selectedSocialAccountId
+        scheduledFor: new Date(dateTime).toISOString(),
+        socialAccountId
       });
+      setSelectedSocialAccountId(socialAccountId);
+      setScheduleDateTime(dateTime);
       await refreshSocialData();
       setScheduleMessage("Post agendado com sucesso.");
+      setIsScheduleModalOpen(false);
       setActiveView("agenda");
     } catch (caughtError) {
       setScheduleError(
@@ -810,34 +814,14 @@ export default function Home() {
             </div>
               <div className="topbar-actions">
                 {result && (
-                  <div className="schedule-inline">
-                    <select
-                      aria-label="Conta do Instagram"
-                      value={selectedSocialAccountId}
-                      onChange={(event) =>
-                        setSelectedSocialAccountId(event.target.value)
-                      }
-                    >
-                      <option value="">Conta Instagram</option>
-                      {socialAccounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          @{account.instagram_username || account.page_name || "instagram"}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      aria-label="Data e horario"
-                      type="datetime-local"
-                      value={scheduleDateTime}
-                      onChange={(event) => setScheduleDateTime(event.target.value)}
-                    />
+                  <div className="schedule-inline compact-actions">
                     <button
                       className="schedule-button"
                       type="button"
-                      onClick={scheduleCurrentPost}
+                      onClick={() => setIsScheduleModalOpen(true)}
                       disabled={isScheduling || isPublishingNow || !result}
                     >
-                      <Send size={16} />
+                      <CalendarClock size={16} />
                       Agendar
                     </button>
                     <button
@@ -871,6 +855,18 @@ export default function Home() {
 
           {scheduleError && <p className="error-message">{scheduleError}</p>}
           {scheduleMessage && <p className="success-message">{scheduleMessage}</p>}
+          {result && isScheduleModalOpen && (
+            <ScheduleModal
+              accounts={socialAccounts}
+              dateTime={scheduleDateTime}
+              isSubmitting={isScheduling}
+              onClose={() => setIsScheduleModalOpen(false)}
+              onConfirm={(socialAccountId, dateTime) =>
+                scheduleCurrentPost(socialAccountId, dateTime)
+              }
+              selectedAccountId={selectedSocialAccountId}
+            />
+          )}
 
           {isLoading ? (
             <LoadingPostState />
@@ -916,6 +912,7 @@ export default function Home() {
         {activeView === "agenda" && (
           <DashboardSection eyebrow="Calendario" title="Posts agendados">
             <ScheduledPostsPanel
+              accounts={socialAccounts}
               posts={scheduledPosts}
               onCancel={cancelSchedule}
             />
@@ -1102,26 +1099,30 @@ function SavedPostScheduler({
   const [socialAccountId, setSocialAccountId] = useState(
     socialAccounts[0]?.id || ""
   );
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setSocialAccountId((current) => current || socialAccounts[0]?.id || "");
   }, [socialAccounts]);
 
-  async function schedule() {
+  async function schedule(nextSocialAccountId: string, nextDateTime: string) {
     setMessage(null);
 
-    if (!socialAccountId) {
+    if (!nextSocialAccountId) {
       setMessage("Conecte uma conta do Instagram.");
       return;
     }
 
-    if (!dateTime) {
+    if (!nextDateTime) {
       setMessage("Escolha data e horario.");
       return;
     }
 
-    await onSchedule(post, socialAccountId, dateTime);
+    setSocialAccountId(nextSocialAccountId);
+    setDateTime(nextDateTime);
+    await onSchedule(post, nextSocialAccountId, nextDateTime);
+    setIsModalOpen(false);
   }
 
   async function publishNow() {
@@ -1137,33 +1138,127 @@ function SavedPostScheduler({
 
   return (
     <div className="saved-post-scheduler">
-      <select
-        aria-label="Conta do Instagram"
-        value={socialAccountId}
-        onChange={(event) => setSocialAccountId(event.target.value)}
-      >
-        <option value="">Conta Instagram</option>
-        {socialAccounts.map((account) => (
-          <option key={account.id} value={account.id}>
-            @{account.instagram_username || account.page_name || "instagram"}
-          </option>
-        ))}
-      </select>
-      <input
-        aria-label="Data e horario"
-        type="datetime-local"
-        value={dateTime}
-        onChange={(event) => setDateTime(event.target.value)}
-      />
-      <button type="button" onClick={schedule}>
-        <CalendarClock size={16} />
-        Agendar
-      </button>
-      <button className="now" type="button" onClick={publishNow}>
-        <Send size={16} />
-        Publicar agora
-      </button>
+      <div className="saved-post-scheduler-actions">
+        <button type="button" onClick={() => setIsModalOpen(true)}>
+          <CalendarClock size={16} />
+          Agendar
+        </button>
+        <button className="now" type="button" onClick={publishNow}>
+          <Send size={16} />
+          Publicar agora
+        </button>
+      </div>
       {message && <span>{message}</span>}
+      {isModalOpen && (
+        <ScheduleModal
+          accounts={socialAccounts}
+          dateTime={dateTime}
+          onClose={() => setIsModalOpen(false)}
+          onConfirm={schedule}
+          selectedAccountId={socialAccountId}
+        />
+      )}
+    </div>
+  );
+}
+
+function ScheduleModal({
+  accounts,
+  dateTime,
+  isSubmitting = false,
+  onClose,
+  onConfirm,
+  selectedAccountId
+}: {
+  accounts: SocialAccount[];
+  dateTime: string;
+  isSubmitting?: boolean;
+  onClose: () => void;
+  onConfirm: (socialAccountId: string, dateTime: string) => void | Promise<void>;
+  selectedAccountId: string;
+}) {
+  const [localAccountId, setLocalAccountId] = useState(
+    selectedAccountId || accounts[0]?.id || ""
+  );
+  const [localDateTime, setLocalDateTime] = useState(dateTime);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  async function confirmSchedule() {
+    setLocalError(null);
+
+    if (!localAccountId) {
+      setLocalError("Selecione uma conta do Instagram.");
+      return;
+    }
+
+    if (!localDateTime) {
+      setLocalError("Escolha data e horario para publicar.");
+      return;
+    }
+
+    await onConfirm(localAccountId, localDateTime);
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        aria-modal="true"
+        className="schedule-modal"
+        role="dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="schedule-modal-header">
+          <div>
+            <p className="eyebrow">Agendamento</p>
+            <h3>Programar post</h3>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar">
+            X
+          </button>
+        </div>
+
+        <div className="schedule-modal-fields">
+          <label>
+            <span>Conta do Instagram</span>
+            <select
+              value={localAccountId}
+              onChange={(event) => setLocalAccountId(event.target.value)}
+            >
+              <option value="">Selecione uma conta</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  @{account.instagram_username || account.page_name || "instagram"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Data e horario</span>
+            <input
+              type="datetime-local"
+              value={localDateTime}
+              onChange={(event) => setLocalDateTime(event.target.value)}
+            />
+          </label>
+        </div>
+
+        {localError && <p className="error-message">{localError}</p>}
+
+        <div className="schedule-modal-actions">
+          <button className="modal-cancel-button" type="button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            className="schedule-button"
+            type="button"
+            onClick={confirmSchedule}
+            disabled={isSubmitting}
+          >
+            <CalendarClock size={16} />
+            Confirmar agendamento
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1257,12 +1352,39 @@ function SocialAccountsPanel({
 }
 
 function ScheduledPostsPanel({
+  accounts,
   onCancel,
   posts
 }: {
+  accounts: SocialAccount[];
   onCancel: (id: string) => void | Promise<void>;
   posts: ScheduledPost[];
 }) {
+  const accountTabs = buildScheduleAccountTabs(accounts, posts);
+  const [activeAccountId, setActiveAccountId] = useState(
+    accountTabs[0]?.id || ""
+  );
+  const [activeStatusTab, setActiveStatusTab] = useState<
+    "agendados" | "publicados"
+  >("agendados");
+  const selectedAccountId = accountTabs.some((account) => account.id === activeAccountId)
+    ? activeAccountId
+    : accountTabs[0]?.id || "";
+  const accountPosts = posts.filter(
+    (post) => post.social_account_id === selectedAccountId
+  );
+  const visiblePosts = accountPosts.filter((post) =>
+    activeStatusTab === "agendados"
+      ? post.status === "pending" || post.status === "publishing"
+      : post.status === "published"
+  );
+  const scheduledCount = accountPosts.filter(
+    (post) => post.status === "pending" || post.status === "publishing"
+  ).length;
+  const publishedCount = accountPosts.filter(
+    (post) => post.status === "published"
+  ).length;
+
   if (posts.length === 0) {
     return (
       <div className="empty-state">
@@ -1276,31 +1398,112 @@ function ScheduledPostsPanel({
   }
 
   return (
-    <div className="schedule-list">
-      {posts.map((post) => (
-        <div className="schedule-item" key={post.id}>
-          <div>
-            <p className="eyebrow">
-              @{post.instagram_username || post.page_name || "instagram"}
-            </p>
-            <h3>{formatDateTime(post.scheduled_for)}</h3>
-            <p>{post.caption}</p>
-            {post.error_message && <span>{post.error_message}</span>}
+    <div className="schedule-panel">
+      <div className="account-tabs" aria-label="Contas do Instagram">
+        {accountTabs.map((account) => (
+          <button
+            className={clsx(selectedAccountId === account.id && "active")}
+            key={account.id}
+            type="button"
+            onClick={() => setActiveAccountId(account.id)}
+          >
+            @{account.label}
+            <span>{account.count}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="schedule-status-tabs" aria-label="Status dos posts">
+        <button
+          className={clsx(activeStatusTab === "agendados" && "active")}
+          type="button"
+          onClick={() => setActiveStatusTab("agendados")}
+        >
+          Agendados
+          <span>{scheduledCount}</span>
+        </button>
+        <button
+          className={clsx(activeStatusTab === "publicados" && "active")}
+          type="button"
+          onClick={() => setActiveStatusTab("publicados")}
+        >
+          Publicados
+          <span>{publishedCount}</span>
+        </button>
+      </div>
+
+      {visiblePosts.length === 0 ? (
+        <div className="empty-state compact-empty">
+          <div className="empty-icon">
+            <CalendarClock size={30} />
           </div>
-          <div className="schedule-item-side">
-            <span className={clsx("status-pill", post.status)}>
-              {getScheduleStatusLabel(post.status)}
-            </span>
-            {post.status === "pending" && (
-              <button type="button" onClick={() => onCancel(post.id)}>
-                Cancelar
-              </button>
-            )}
-          </div>
+          <h3>
+            {activeStatusTab === "agendados"
+              ? "Nenhum post agendado nesta conta."
+              : "Nenhum post publicado nesta conta."}
+          </h3>
+          <p>Os posts desta conta aparecem aqui conforme o status.</p>
         </div>
-      ))}
+      ) : (
+        <div className="schedule-list">
+          {visiblePosts.map((post) => (
+            <div className="schedule-item" key={post.id}>
+              <div>
+                <p className="eyebrow">
+                  @{post.instagram_username || post.page_name || "instagram"}
+                </p>
+                <h3>{formatDateTime(post.scheduled_for)}</h3>
+                <p>{post.caption}</p>
+                {post.error_message && <span>{post.error_message}</span>}
+              </div>
+              <div className="schedule-item-side">
+                <span className={clsx("status-pill", post.status)}>
+                  {getScheduleStatusLabel(post.status)}
+                </span>
+                {post.status === "pending" && (
+                  <button type="button" onClick={() => onCancel(post.id)}>
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+function buildScheduleAccountTabs(
+  accounts: SocialAccount[],
+  posts: ScheduledPost[]
+) {
+  const accountMap = new Map<string, { count: number; id: string; label: string }>();
+
+  accounts.forEach((account) => {
+    accountMap.set(account.id, {
+      count: 0,
+      id: account.id,
+      label: account.instagram_username || account.page_name || "instagram"
+    });
+  });
+
+  posts.forEach((post) => {
+    const current = accountMap.get(post.social_account_id);
+
+    if (current) {
+      current.count += 1;
+      return;
+    }
+
+    accountMap.set(post.social_account_id, {
+      count: 1,
+      id: post.social_account_id,
+      label: post.instagram_username || post.page_name || "instagram"
+    });
+  });
+
+  return Array.from(accountMap.values()).filter((account) => account.count > 0);
 }
 
 function UsagePanel({

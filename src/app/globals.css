@@ -2245,6 +2245,17 @@ textarea:focus {
   background: #F8F9FA;
 }
 
+.schedule-inline.compact-actions {
+  flex-wrap: nowrap;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.schedule-inline.compact-actions .schedule-button {
+  min-width: 142px;
+}
+
 .schedule-inline select,
 .schedule-inline input {
   width: auto;
@@ -2305,6 +2316,7 @@ textarea:focus {
   color: #ffffff;
   background: var(--brand-gradient);
   box-shadow: var(--button-shadow);
+  white-space: nowrap;
 }
 
 .schedule-button:hover {
@@ -2322,6 +2334,7 @@ textarea:focus {
 .schedule-button.now {
   background: var(--success-gradient);
   box-shadow: var(--success-shadow);
+  min-width: 142px;
 }
 
 .schedule-button.now:hover {
@@ -2408,23 +2421,22 @@ textarea:focus {
 
 .saved-post-scheduler {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(170px, 1fr) repeat(2, 124px);
-  gap: 7px;
-  padding: 12px;
+  gap: 8px;
+  justify-items: end;
+  padding: 10px 12px;
   border-top: 1px solid var(--line);
   background: #f8fafc;
 }
 
-.saved-post-scheduler select,
-.saved-post-scheduler input {
-  width: 100%;
-  min-height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--ink);
-  padding: 0 10px;
-  font-size: 0.85rem;
+.saved-post-scheduler-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.saved-post-scheduler-actions button {
+  width: 132px;
 }
 
 .saved-post-scheduler button {
@@ -2441,6 +2453,7 @@ textarea:focus {
   box-shadow: 0 5px 12px rgba(0, 82, 255, 0.12);
   font-size: 0.8rem;
   font-weight: 700;
+  white-space: nowrap;
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease,
@@ -2456,6 +2469,7 @@ textarea:focus {
 .saved-post-scheduler button.now {
   background: var(--success-gradient);
   box-shadow: 0 5px 12px rgba(16, 185, 129, 0.14);
+  min-width: 124px;
 }
 
 .saved-post-scheduler button.now:hover {
@@ -2464,10 +2478,119 @@ textarea:focus {
 }
 
 .saved-post-scheduler span {
-  grid-column: 1 / -1;
+  justify-self: stretch;
   color: var(--danger);
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(6px);
+}
+
+.schedule-modal {
+  display: grid;
+  gap: 18px;
+  width: min(100%, 480px);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  padding: 22px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+}
+
+.schedule-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+
+.schedule-modal-header h3 {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+
+.schedule-modal-header button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.schedule-modal-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.schedule-modal-fields label {
+  display: grid;
+  gap: 7px;
+}
+
+.schedule-modal-fields label span {
+  color: var(--ink);
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.schedule-modal-fields select,
+.schedule-modal-fields input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+  font-size: 0.92rem;
+}
+
+.schedule-modal-fields select {
+  padding: 0 12px;
+}
+
+.schedule-modal-fields input {
+  padding: 0 12px;
+}
+
+.schedule-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.schedule-modal-actions button {
+  min-height: 38px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.modal-cancel-button {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: #ffffff;
 }
 
 .topbar-actions button:disabled,
@@ -2598,6 +2721,64 @@ textarea:focus {
 .schedule-list {
   display: grid;
   gap: 16px;
+}
+
+.schedule-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.account-tabs,
+.schedule-status-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.account-tabs {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.account-tabs button,
+.schedule-status-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.account-tabs button.active,
+.schedule-status-tabs button.active {
+  border-color: rgba(0, 82, 255, 0.18);
+  color: var(--accent);
+  background: rgba(0, 82, 255, 0.06);
+}
+
+.account-tabs button span,
+.schedule-status-tabs button span {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: inherit;
+  background: rgba(15, 23, 42, 0.05);
+  font-size: 0.74rem;
+}
+
+.account-tabs button.active span,
+.schedule-status-tabs button.active span {
+  background: rgba(0, 82, 255, 0.1);
 }
 
 .integration-header {
@@ -3225,10 +3406,6 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .saved-post-scheduler {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .profile-grid,
   .metrics-grid {
     grid-template-columns: 1fr;
@@ -3259,7 +3436,6 @@ textarea:focus {
   }
 
   .sidebar-nav,
-  .saved-post-scheduler,
   .post-card.compact {
     grid-template-columns: 1fr;
   }
@@ -3293,6 +3469,27 @@ textarea:focus {
 
   .library-filter-bar button {
     min-width: 0;
+  }
+
+  .topbar-actions,
+  .schedule-inline.compact-actions,
+  .saved-post-scheduler-actions,
+  .schedule-modal-actions {
+    width: 100%;
+  }
+
+  .schedule-inline.compact-actions,
+  .saved-post-scheduler-actions,
+  .schedule-modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-inline.compact-actions button,
+  .saved-post-scheduler-actions button,
+  .schedule-modal-actions button {
+    min-width: 0;
+    width: 100%;
   }
 
   .marketing-nav {

@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     const database = getDatabase();
     const result = await database.query(
-      `select sp.id, sp.saved_post_id, sp.caption, sp.media_urls, sp.scheduled_for,
+      `select sp.id, sp.saved_post_id, sp.social_account_id, sp.caption, sp.media_urls, sp.scheduled_for,
               sp.status, sp.provider_media_id, sp.error_message, sp.created_at,
               sa.instagram_username, sa.page_name
        from scheduled_posts sp
