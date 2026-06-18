@@ -2254,6 +2254,49 @@ textarea:focus {
   min-width: 122px;
 }
 
+.result-card-stack {
+  display: grid;
+  justify-content: center;
+  gap: 12px;
+}
+
+.result-card-stack .post-card {
+  width: min(100%, 620px);
+}
+
+.result-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, auto) 36px;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 620px);
+  justify-self: center;
+}
+
+.result-card-actions .schedule-button {
+  min-height: 34px;
+  border-radius: 7px;
+  box-shadow: none;
+  font-size: 0.78rem;
+}
+
+.discard-icon-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 34px;
+  border: 1px solid rgba(239, 68, 68, 0.16);
+  border-radius: 8px;
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.06);
+  box-shadow: none;
+}
+
+.discard-icon-button:hover {
+  color: #ffffff;
+  background: var(--danger-gradient);
+}
+
 .schedule-inline {
   display: inline-flex;
   align-items: center;
@@ -3706,6 +3749,7 @@ textarea:focus {
 
   .topbar-actions,
   .result-action-bar,
+  .result-card-actions,
   .schedule-inline.compact-actions,
   .saved-post-scheduler-actions,
   .schedule-modal-actions {
@@ -3713,6 +3757,7 @@ textarea:focus {
   }
 
   .result-action-bar,
+  .result-card-actions,
   .schedule-inline.compact-actions,
   .saved-post-scheduler-actions,
   .schedule-modal-actions {
@@ -3721,10 +3766,20 @@ textarea:focus {
   }
 
   .result-action-bar button,
+  .result-card-actions button,
   .schedule-inline.compact-actions button,
   .saved-post-scheduler-actions button,
   .schedule-modal-actions button {
     min-width: 0;
+    width: 100%;
+  }
+
+  .result-card-actions .autosave-pill {
+    grid-column: 1 / -2;
+    justify-content: center;
+  }
+
+  .result-card-actions .discard-icon-button {
     width: 100%;
   }
 

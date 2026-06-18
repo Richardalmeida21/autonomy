@@ -827,45 +827,6 @@ export default function Home() {
               <p className="eyebrow">Saida estruturada</p>
               <h2>Post completo pronto para o calendario</h2>
             </div>
-              <div className="topbar-actions">
-                {result && (
-                  <div className="result-action-bar">
-                    <button
-                      className="schedule-button"
-                      type="button"
-                      onClick={() => setIsScheduleModalOpen(true)}
-                      disabled={isScheduling || isPublishingNow || !result}
-                    >
-                      <CalendarClock size={16} />
-                      Agendar
-                    </button>
-                    <button
-                      className="schedule-button now"
-                      type="button"
-                      onClick={publishCurrentPostNow}
-                      disabled={isScheduling || isPublishingNow || !result}
-                    >
-                      <Send size={16} />
-                      {isPublishingNow ? "Postando" : "Postar agora"}
-                    </button>
-                  </div>
-                )}
-                {result && (
-                  <span className="autosave-pill">
-                    <Library size={16} />
-                    Salvo automaticamente
-                  </span>
-                )}
-                <button
-                  className="discard-button result-discard-button"
-                  type="button"
-                  onClick={discardCurrentPost}
-                  disabled={!result || isLoading}
-                >
-                  <Trash2 size={16} />
-                  Descartar
-                </button>
-              </div>
           </div>
 
           {scheduleError && <p className="error-message">{scheduleError}</p>}
@@ -886,13 +847,47 @@ export default function Home() {
           {isLoading ? (
             <LoadingPostState />
           ) : result ? (
-            <div className="cards-grid single-card">
+            <div className="result-card-stack">
               <PostCard
+                hideActions
                 editable
                 label="Post gerado"
                 option={result.post}
                 onChange={updateGeneratedPost}
               />
+              <div className="result-card-actions">
+                <button
+                  className="schedule-button"
+                  type="button"
+                  onClick={() => setIsScheduleModalOpen(true)}
+                  disabled={isScheduling || isPublishingNow || !result}
+                >
+                  <CalendarClock size={16} />
+                  Agendar
+                </button>
+                <button
+                  className="schedule-button now"
+                  type="button"
+                  onClick={publishCurrentPostNow}
+                  disabled={isScheduling || isPublishingNow || !result}
+                >
+                  <Send size={16} />
+                  {isPublishingNow ? "Postando" : "Postar agora"}
+                </button>
+                <span className="autosave-pill">
+                  <Library size={16} />
+                  Salvo automaticamente
+                </span>
+                <button
+                  className="discard-icon-button"
+                  type="button"
+                  onClick={discardCurrentPost}
+                  disabled={!result || isLoading}
+                  aria-label="Descartar post"
+                >
+                  <Trash2 size={17} />
+                </button>
+              </div>
             </div>
           ) : (
             <div className="empty-state">
@@ -1939,6 +1934,7 @@ function PostCard({
   compact = false,
   editable = false,
   extraActions,
+  hideActions = false,
   label,
   onChange,
   option
@@ -1946,6 +1942,7 @@ function PostCard({
   compact?: boolean;
   editable?: boolean;
   extraActions?: ReactNode;
+  hideActions?: boolean;
   label: string;
   onChange?: (option: GeneratedPost["post"]) => void;
   option: GeneratedPost["post"];
@@ -2000,22 +1997,24 @@ function PostCard({
     <article className={clsx("post-card", compact && "compact")}>
       <div className="card-header">
         <span>{label}</span>
-        <div className="card-actions">
-          {extraActions}
-          <button type="button" onClick={copyCaption} aria-label="Copiar descricao">
-            <Copy size={17} />
-            {copied ? "Copiado" : "Copiar"}
-          </button>
-          <button
-            type="button"
-            onClick={downloadImages}
-            aria-label="Baixar imagem"
-            disabled={images.length === 0}
-          >
-            <Download size={17} />
-            Baixar
-          </button>
-        </div>
+        {!hideActions && (
+          <div className="card-actions">
+            {extraActions}
+            <button type="button" onClick={copyCaption} aria-label="Copiar descricao">
+              <Copy size={17} />
+              {copied ? "Copiado" : "Copiar"}
+            </button>
+            <button
+              type="button"
+              onClick={downloadImages}
+              aria-label="Baixar imagem"
+              disabled={images.length === 0}
+            >
+              <Download size={17} />
+              Baixar
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="generated-media">

@@ -18,6 +18,7 @@ import { getUserFromRequest } from "@/lib/supabase-server";
 export const runtime = "nodejs";
 
 type QueryableDatabase = Pick<Pool | PoolClient, "query">;
+const STALE_RESERVATION_INTERVAL = "30 minutes";
 
 export async function POST(request: Request) {
   try {
@@ -57,16 +58,19 @@ export async function POST(request: Request) {
     }
 
     const creditCost = getGenerationCreditCost(parsedInput.data);
+    const database = getDatabase();
     const client = getOpenAIClient();
     const systemPrompt = await getAutonomyPrompt();
-    const database = getDatabase();
+    const reservationId = crypto.randomUUID();
+    const startedAt = Date.now();
     const transaction = await database.connect();
+    let usage: { creditLimit: number; usedCredits: number };
 
     try {
       await transaction.query("begin");
       await lockUserCredits({ database: transaction, userId: user.id });
 
-      const usage = await assertGenerationAllowed({
+      usage = await assertGenerationAllowed({
         database: transaction,
         userId: user.id,
         email: user.email || "",
@@ -75,17 +79,10 @@ export async function POST(request: Request) {
         creditCost
       });
 
-      const generatedPost = await generatePost({
-        client,
-        input: parsedInput.data,
-        systemPrompt,
-        userId: user.id
-      });
-
-      await recordUsageEvent({
+      await reserveUsageEvent({
         database: transaction,
-        userId: user.id,
         creditCost,
+        reservationId,
         metadata: {
           mode: parsedInput.data.modo,
           niche: parsedInput.data.nicho,
@@ -94,20 +91,53 @@ export async function POST(request: Request) {
             parsedInput.data.modo === "criativo"
               ? parsedInput.data.formato_visual
               : "contextual",
-          generated_images: generatedPost.post.generated_images.length,
+          status: "reserved",
           credits_before: usage.usedCredits,
           credits_after: usage.usedCredits + creditCost,
           credits_limit: usage.creditLimit
-        }
+        },
+        userId: user.id
       });
 
       await transaction.query("commit");
-      return NextResponse.json(generatedPost);
     } catch (error) {
       await transaction.query("rollback").catch(() => undefined);
       throw error;
     } finally {
       transaction.release();
+    }
+
+    try {
+      const generatedPost = await generatePost({
+        client,
+        input: parsedInput.data,
+        systemPrompt,
+        userId: user.id
+      });
+
+      await completeUsageReservation({
+        database,
+        generatedImages: generatedPost.post.generated_images.length,
+        reservationId,
+        userId: user.id
+      });
+
+      console.info("generate-post completed", {
+        duration_ms: Date.now() - startedAt,
+        images: generatedPost.post.generated_images.length,
+        mode: parsedInput.data.modo,
+        reservation_id: reservationId,
+        user_id: user.id
+      });
+
+      return NextResponse.json(generatedPost);
+    } catch (error) {
+      await refundUsageReservation({
+        database,
+        reservationId,
+        userId: user.id
+      }).catch(() => undefined);
+      throw error;
     }
   } catch (error) {
     const message =
@@ -286,7 +316,7 @@ async function generateContextualImageFromUpload({
       image: uploadedImage,
       prompt,
       size: "1024x1024",
-      quality: "medium",
+      quality: getImageQuality(),
       n: 1
     });
 
@@ -393,7 +423,7 @@ async function generateImageForOption({
     model: getImageModel(),
     prompt: finalPrompt,
     size: "1024x1024",
-    quality: "medium",
+    quality: getImageQuality(),
     n: 1
   });
 
@@ -444,8 +474,12 @@ async function assertGenerationAllowed({
     `select coalesce(sum(credits_used), 0)::int as used_credits
      from usage_events
      where user_id = $1
-       and created_at >= date_trunc('month', now())`,
-    [userId]
+       and created_at >= date_trunc('month', now())
+       and not (
+         metadata->>'status' = 'reserved'
+         and created_at < now() - $2::interval
+       )`,
+    [userId, STALE_RESERVATION_INTERVAL]
   );
   const usedCredits = Number(usageResult.rows[0]?.used_credits || 0);
   const creditLimit = Number(profile.credits_limit || plans[1].creditLimit);
@@ -468,6 +502,21 @@ async function assertGenerationAllowed({
   }
 
   return { creditLimit, usedCredits };
+}
+
+function getImageQuality() {
+  const quality = process.env.OPENAI_IMAGE_QUALITY;
+
+  if (
+    quality === "medium" ||
+    quality === "high" ||
+    quality === "auto" ||
+    quality === "standard"
+  ) {
+    return quality;
+  }
+
+  return "low";
 }
 
 async function lockUserCredits({
@@ -537,21 +586,77 @@ async function ensureProfile({
   };
 }
 
-async function recordUsageEvent({
+async function reserveUsageEvent({
   creditCost,
   database,
   metadata,
+  reservationId,
   userId
 }: {
   creditCost: number;
   database: QueryableDatabase;
   metadata: Record<string, unknown>;
+  reservationId: string;
   userId: string;
 }) {
   await database.query(
     `insert into usage_events (user_id, event_type, credits_used, metadata)
      values ($1, $2, $3, $4)`,
-    [userId, "generate_post", creditCost, metadata]
+    [
+      userId,
+      "generate_post",
+      creditCost,
+      {
+        ...metadata,
+        reservation_id: reservationId
+      }
+    ]
+  );
+}
+
+async function completeUsageReservation({
+  database,
+  generatedImages,
+  reservationId,
+  userId
+}: {
+  database: QueryableDatabase;
+  generatedImages: number;
+  reservationId: string;
+  userId: string;
+}) {
+  await database.query(
+    `update usage_events
+     set metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
+     where user_id = $1
+       and metadata->>'reservation_id' = $2`,
+    [
+      userId,
+      reservationId,
+      JSON.stringify({
+        completed_at: new Date().toISOString(),
+        generated_images: generatedImages,
+        status: "completed"
+      })
+    ]
+  );
+}
+
+async function refundUsageReservation({
+  database,
+  reservationId,
+  userId
+}: {
+  database: QueryableDatabase;
+  reservationId: string;
+  userId: string;
+}) {
+  await database.query(
+    `delete from usage_events
+     where user_id = $1
+       and metadata->>'reservation_id' = $2
+       and metadata->>'status' = 'reserved'`,
+    [userId, reservationId]
   );
 }
 

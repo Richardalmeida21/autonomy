@@ -4,6 +4,7 @@ import { plans } from "@/lib/plans";
 import { getUserFromRequest } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
+const STALE_RESERVATION_INTERVAL = "30 minutes";
 
 export async function GET(request: Request) {
   try {
@@ -22,9 +23,13 @@ export async function GET(request: Request) {
        left join usage_events u
          on u.user_id = p.id
         and u.created_at >= date_trunc('month', now())
+        and not (
+          u.metadata->>'status' = 'reserved'
+          and u.created_at < now() - $3::interval
+        )
        where p.id = $1
        group by p.credits_limit`,
-      [user.id, plans[1].creditLimit]
+      [user.id, plans[1].creditLimit, STALE_RESERVATION_INTERVAL]
     );
 
     const creditsLimit = Number(
