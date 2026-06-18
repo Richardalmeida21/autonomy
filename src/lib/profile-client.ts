@@ -5,7 +5,6 @@ export type ProfileInput = {
   fullName: string;
   document: string;
   phone: string;
-  plan: string;
 };
 
 export async function getProfile() {

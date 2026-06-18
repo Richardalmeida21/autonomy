@@ -4,6 +4,7 @@ import { getDatabase } from "@/lib/db";
 import { publishInstagramMedia, type SocialAccountRecord } from "@/lib/meta";
 import { uploadPostImages } from "@/lib/post-images";
 import { generatedPostZodSchema } from "@/lib/post-schema";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getUserFromRequest } from "@/lib/supabase-server";
 
 const scheduleInputSchema = z.object({
@@ -23,6 +24,22 @@ export async function GET(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+    }
+
+    const rateLimit = checkRateLimit({
+      identifier: `schedule:create:${user.id}`,
+      limit: 30,
+      windowMs: 60 * 1000
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Muitas publicacoes em pouco tempo. Tente novamente em instantes." },
+        {
+          headers: { "Retry-After": String(rateLimit.retryAfter) },
+          status: 429
+        }
+      );
     }
 
     const database = getDatabase();
@@ -110,6 +127,20 @@ export async function POST(request: Request) {
         { error: "Conta do Instagram nao conectada." },
         { status: 404 }
       );
+    }
+
+    if (parsedInput.data.savedPostId) {
+      const savedPost = await database.query(
+        `select id from saved_posts where id = $1 and user_id = $2`,
+        [parsedInput.data.savedPostId, user.id]
+      );
+
+      if (savedPost.rowCount === 0) {
+        return NextResponse.json(
+          { error: "Post salvo nao encontrado." },
+          { status: 404 }
+        );
+      }
     }
 
     const scheduleIdResult = await database.query("select gen_random_uuid() as id");

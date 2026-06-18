@@ -66,7 +66,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const planId = session.metadata?.plan || "pro";
   const plan = getPlan(planId) || plans[1];
 
-  if (!userId) {
+  if (!userId || !["paid", "no_payment_required"].includes(session.payment_status)) {
     return;
   }
 

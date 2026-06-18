@@ -6,22 +6,16 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const database = getDatabase();
-    const result = await database.query(
-      "select count(*)::int as saved_posts from saved_posts"
-    );
+    await database.query("select 1");
 
     return NextResponse.json({
-      ok: true,
-      saved_posts: result.rows[0]?.saved_posts ?? 0
+      ok: true
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       {
         ok: false,
-        error:
-          error instanceof Error && error.message
-            ? error.message
-            : "Falha ao conectar no banco."
+        error: "Falha ao conectar no banco."
       },
       { status: 500 }
     );

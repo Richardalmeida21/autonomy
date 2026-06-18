@@ -52,8 +52,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           data: {
             full_name: fullName,
             document,
-            phone,
-            plan: selectedPlan
+            phone
           }
         }
       });
@@ -75,8 +74,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         email,
         fullName,
         document,
-        phone,
-        plan: selectedPlan
+        phone
       });
 
       const checkoutResponse = await fetch("/api/checkout", {

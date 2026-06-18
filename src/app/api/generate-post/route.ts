@@ -4,6 +4,7 @@ import { getDatabase } from "@/lib/db";
 import { getGenerationModel, getImageModel, getOpenAIClient } from "@/lib/openai";
 import { getPlan, plans } from "@/lib/plans";
 import { uploadPostImages } from "@/lib/post-images";
+import { checkRateLimit } from "@/lib/rate-limit";
 import type { PoolClient, Pool } from "pg";
 import {
   generatedPostSchema,
@@ -23,6 +24,22 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+    }
+
+    const rateLimit = checkRateLimit({
+      identifier: `generate:${user.id}`,
+      limit: 8,
+      windowMs: 60 * 1000
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Muitas geracoes em pouco tempo. Tente novamente em instantes." },
+        {
+          headers: { "Retry-After": String(rateLimit.retryAfter) },
+          status: 429
+        }
+      );
     }
 
     const body = await request.json();
@@ -309,14 +326,11 @@ async function assertGenerationAllowed({
     database,
     email,
     metadata,
-    planId: String(metadata.plan || "pro"),
+    planId: "pro",
     userId
   });
 
-  if (
-    profile.subscription_status &&
-    !["active", "trialing"].includes(profile.subscription_status)
-  ) {
+  if (!["active", "trialing"].includes(profile.subscription_status || "")) {
     throw new Error("Assinatura inativa. Atualize o pagamento para gerar posts.");
   }
 

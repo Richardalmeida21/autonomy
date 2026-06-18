@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDatabase } from "@/lib/db";
 import { plans } from "@/lib/plans";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getUserFromRequest } from "@/lib/supabase-server";
 
 const profileInputSchema = z.object({
   email: z.string().email(),
   fullName: z.string().min(2),
   document: z.string().min(5),
-  phone: z.string().min(8),
-  plan: z.string()
+  phone: z.string().min(8)
 });
 
 export const runtime = "nodejs";
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
         full_name: user.user_metadata.full_name || "",
         document: user.user_metadata.document || "",
         phone: user.user_metadata.phone || "",
-        plan: user.user_metadata.plan || "pro",
+        plan: "pro",
         credits_limit: plans[1].creditLimit,
         subscription_status: null
       });
@@ -65,6 +65,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
     }
 
+    const rateLimit = checkRateLimit({
+      identifier: `profile:update:${user.id}`,
+      limit: 20,
+      windowMs: 60 * 1000
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Muitas tentativas. Tente novamente em instantes." },
+        {
+          headers: { "Retry-After": String(rateLimit.retryAfter) },
+          status: 429
+        }
+      );
+    }
+
     const body = await request.json();
     const parsedProfile = profileInputSchema.safeParse(body);
 
@@ -78,30 +94,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const plan =
-      plans.find((candidate) => candidate.id === parsedProfile.data.plan) ||
-      plans[1];
     const database = getDatabase();
 
     await database.query(
-      `insert into profiles (id, email, full_name, document, phone, plan, credits_limit)
-       values ($1, $2, $3, $4, $5, $6, $7)
+      `insert into profiles (id, email, full_name, document, phone)
+       values ($1, $2, $3, $4, $5)
        on conflict (id)
        do update set
          email = excluded.email,
          full_name = excluded.full_name,
          document = excluded.document,
-         phone = excluded.phone,
-         plan = excluded.plan,
-         credits_limit = excluded.credits_limit`,
+         phone = excluded.phone`,
       [
         user.id,
-        parsedProfile.data.email,
+        user.email || parsedProfile.data.email,
         parsedProfile.data.fullName,
         parsedProfile.data.document,
-        parsedProfile.data.phone,
-        plan.id,
-        plan.creditLimit
+        parsedProfile.data.phone
       ]
     );
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDatabase } from "@/lib/db";
 import { getPlan } from "@/lib/plans";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
 import { getUserFromRequest } from "@/lib/supabase-server";
 
@@ -21,6 +22,22 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+    }
+
+    const rateLimit = checkRateLimit({
+      identifier: `checkout:${user.id}`,
+      limit: 10,
+      windowMs: 60 * 1000
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Muitas tentativas. Tente novamente em instantes." },
+        {
+          headers: { "Retry-After": String(rateLimit.retryAfter) },
+          status: 429
+        }
+      );
     }
 
     const body = await request.json();
@@ -51,36 +68,39 @@ export async function POST(request: Request) {
       );
     }
 
-    const origin =
-      request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "";
+    const origin = process.env.NEXT_PUBLIC_APP_URL;
+
+    if (!origin) {
+      return NextResponse.json(
+        { error: "URL publica do app nao configurada." },
+        { status: 500 }
+      );
+    }
+
     const database = getDatabase();
 
     await database.query(
-      `insert into profiles (id, email, full_name, document, phone, plan, credits_limit)
-       values ($1, $2, $3, $4, $5, $6, $7)
+      `insert into profiles (id, email, full_name, document, phone)
+       values ($1, $2, $3, $4, $5)
        on conflict (id)
        do update set
          email = excluded.email,
          full_name = excluded.full_name,
          document = excluded.document,
-         phone = excluded.phone,
-         plan = excluded.plan,
-         credits_limit = excluded.credits_limit`,
+         phone = excluded.phone`,
       [
         user.id,
-        parsedCheckout.data.email,
+        user.email || parsedCheckout.data.email,
         parsedCheckout.data.name || "",
         parsedCheckout.data.document || "",
-        parsedCheckout.data.phone || "",
-        plan.id,
-        plan.creditLimit
+        parsedCheckout.data.phone || ""
       ]
     );
 
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      customer_email: parsedCheckout.data.email,
+      customer_email: user.email || parsedCheckout.data.email,
       client_reference_id: user.id,
       line_items: [
         {
