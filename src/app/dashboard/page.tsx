@@ -492,6 +492,12 @@ export default function Home() {
     setError(null);
   }
 
+  function updateGeneratedPost(nextPost: GeneratedPost["post"]) {
+    setResult((current) =>
+      current ? { ...current, post: nextPost } : current
+    );
+  }
+
   async function deleteSavedPost(id: string) {
     try {
       await deletePost(id);
@@ -870,7 +876,12 @@ export default function Home() {
             <LoadingPostState />
           ) : result ? (
             <div className="cards-grid single-card">
-              <PostCard label="Post gerado" option={result.post} />
+              <PostCard
+                editable
+                label="Post gerado"
+                option={result.post}
+                onChange={updateGeneratedPost}
+              />
             </div>
           ) : (
             <div className="empty-state">
@@ -1032,26 +1043,32 @@ function SavedPostsLibrary({
               <p className="eyebrow">{savedPost.nicho}</p>
               <h3>{savedPost.post.headline_da_imagem}</h3>
             </div>
-            <div className="library-actions">
-              <button
-                className={clsx("favorite-button", savedPost.isFavorite && "active")}
-                type="button"
-                onClick={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
-              >
-                <Star size={16} />
-                {savedPost.isFavorite ? "Favorito" : "Favoritar"}
-              </button>
-              <button
-                className="remove-button"
-                type="button"
-                onClick={() => onDelete(savedPost.id)}
-              >
-                <Trash2 size={16} />
-                Remover
-              </button>
-            </div>
           </div>
-          <PostCard compact label="Post salvo" option={savedPost.post} />
+          <PostCard
+            compact
+            label="Post salvo"
+            option={savedPost.post}
+            extraActions={
+              <>
+                <button
+                  className={clsx("favorite-button", savedPost.isFavorite && "active")}
+                  type="button"
+                  onClick={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
+                >
+                  <Star size={16} />
+                  {savedPost.isFavorite ? "Favorito" : "Favoritar"}
+                </button>
+                <button
+                  className="remove-button"
+                  type="button"
+                  onClick={() => onDelete(savedPost.id)}
+                >
+                  <Trash2 size={16} />
+                  Remover
+                </button>
+              </>
+            }
+          />
           <SavedPostScheduler
             post={savedPost}
             socialAccounts={socialAccounts}
@@ -1508,11 +1525,17 @@ function sortSavedPosts(firstPost: SavedPost, secondPost: SavedPost) {
 
 function PostCard({
   compact = false,
+  editable = false,
+  extraActions,
   label,
+  onChange,
   option
 }: {
   compact?: boolean;
+  editable?: boolean;
+  extraActions?: ReactNode;
   label: string;
+  onChange?: (option: GeneratedPost["post"]) => void;
   option: GeneratedPost["post"];
 }) {
   const [copied, setCopied] = useState(false);
@@ -1525,9 +1548,19 @@ function PostCard({
         : [];
 
   async function copyCaption() {
-    await navigator.clipboard.writeText(option.caption);
+    await navigator.clipboard.writeText(
+      formatCaptionWithHashtags(option.caption, option.hashtags)
+    );
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  function updateCaption(caption: string) {
+    onChange?.({ ...option, caption });
+  }
+
+  function updateHashtags(value: string) {
+    onChange?.({ ...option, hashtags: parseHashtags(value) });
   }
 
   function downloadImages() {
@@ -1561,6 +1594,7 @@ function PostCard({
       <div className="card-header">
         <span>{label}</span>
         <div className="card-actions">
+          {extraActions}
           <button type="button" onClick={copyCaption} aria-label="Copiar descricao">
             <Copy size={17} />
             {copied ? "Copiado" : "Copiar"}
@@ -1631,14 +1665,67 @@ function PostCard({
 
       <div className="card-section">
         <h3>Descricao</h3>
-        <p className="caption-text">{option.caption}</p>
+        {editable ? (
+          <textarea
+            className="caption-editor"
+            aria-label="Editar descricao"
+            rows={8}
+            value={option.caption}
+            onChange={(event) => updateCaption(event.target.value)}
+          />
+        ) : (
+          <p className="caption-text">{option.caption}</p>
+        )}
       </div>
 
-      <div className="hashtags">
-        {option.hashtags.map((tag) => (
-          <span key={tag}>{tag.startsWith("#") ? tag : `#${tag}`}</span>
-        ))}
-      </div>
+      {editable ? (
+        <label className="hashtags-editor">
+          <span>Hashtags</span>
+          <textarea
+            aria-label="Editar hashtags"
+            rows={3}
+            value={option.hashtags
+              .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`))
+              .join(" ")}
+            onChange={(event) => updateHashtags(event.target.value)}
+          />
+        </label>
+      ) : (
+        <div className="hashtags">
+          {option.hashtags.map((tag) => (
+            <span key={tag}>{tag.startsWith("#") ? tag : `#${tag}`}</span>
+          ))}
+        </div>
+      )}
     </article>
   );
+}
+
+function parseHashtags(value: string) {
+  return value
+    .split(/[\s,]+/)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+}
+
+function formatCaptionWithHashtags(caption: string, hashtags: string[]) {
+  const normalizedCaption = caption.trim();
+  const normalizedHashtags = hashtags
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+  const missingHashtags = normalizedHashtags.filter(
+    (tag) => !new RegExp(`(^|\\s)${escapeRegExp(tag)}(\\s|$)`, "i").test(normalizedCaption)
+  );
+
+  if (missingHashtags.length === 0) {
+    return normalizedCaption;
+  }
+
+  return `${normalizedCaption}\n\n${missingHashtags.join(" ")}`;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

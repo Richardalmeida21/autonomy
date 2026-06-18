@@ -133,6 +133,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const publishCaption = formatCaptionWithHashtags(
+      parsedInput.data.post.post.caption,
+      parsedInput.data.post.post.hashtags
+    );
+
     await database.query(
       `insert into scheduled_posts (
          id, user_id, saved_post_id, social_account_id, caption, media_urls,
@@ -144,7 +149,7 @@ export async function POST(request: Request) {
         user.id,
         parsedInput.data.savedPostId || null,
         parsedInput.data.socialAccountId,
-        parsedInput.data.post.post.caption,
+        publishCaption,
         JSON.stringify(mediaUrls),
         parsedInput.data.post,
         scheduledFor.toISOString(),
@@ -156,7 +161,7 @@ export async function POST(request: Request) {
       try {
         const publishResult = await publishInstagramMedia({
           account: account.rows[0] as SocialAccountRecord,
-          caption: parsedInput.data.post.post.caption,
+          caption: publishCaption,
           mediaUrls
         });
 
@@ -205,4 +210,25 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+function formatCaptionWithHashtags(caption: string, hashtags: string[]) {
+  const normalizedCaption = caption.trim();
+  const normalizedHashtags = hashtags
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+  const missingHashtags = normalizedHashtags.filter(
+    (tag) => !new RegExp(`(^|\\s)${escapeRegExp(tag)}(\\s|$)`, "i").test(normalizedCaption)
+  );
+
+  if (missingHashtags.length === 0) {
+    return normalizedCaption;
+  }
+
+  return `${normalizedCaption}\n\n${missingHashtags.join(" ")}`;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
