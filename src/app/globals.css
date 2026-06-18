@@ -2254,47 +2254,42 @@ textarea:focus {
   min-width: 122px;
 }
 
-.result-card-stack {
-  display: grid;
-  justify-content: center;
-  gap: 12px;
-}
-
-.result-card-stack .post-card {
-  width: min(100%, 620px);
-}
-
-.result-card-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, auto) 36px;
+.generated-post-actions {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: min(100%, 620px);
-  justify-self: center;
+  gap: 7px;
 }
 
-.result-card-actions .schedule-button {
+.generated-post-actions .schedule-button {
+  min-width: 132px;
   min-height: 34px;
-  border-radius: 7px;
-  box-shadow: none;
-  font-size: 0.78rem;
+  border-radius: 8px;
+  padding: 0 10px;
+  box-shadow: 0 5px 12px rgba(0, 82, 255, 0.12);
+  font-size: 0.8rem;
+}
+
+.generated-post-actions .schedule-button.now {
+  min-width: 124px;
+  box-shadow: 0 5px 12px rgba(16, 185, 129, 0.14);
 }
 
 .discard-icon-button {
   display: grid;
   place-items: center;
-  width: 36px;
+  width: 34px;
   height: 34px;
-  border: 1px solid rgba(239, 68, 68, 0.16);
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 8px;
-  color: var(--danger);
-  background: rgba(239, 68, 68, 0.06);
-  box-shadow: none;
+  color: var(--muted);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
 }
 
 .discard-icon-button:hover {
-  color: #ffffff;
-  background: var(--danger-gradient);
+  border-color: rgba(239, 68, 68, 0.18);
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.06);
 }
 
 .schedule-inline {
@@ -2725,7 +2720,7 @@ textarea:focus {
 }
 
 .cards-grid.single-card {
-  grid-template-columns: minmax(0, 620px);
+  grid-template-columns: minmax(0, 760px);
   justify-content: center;
 }
 
@@ -3749,7 +3744,7 @@ textarea:focus {
 
   .topbar-actions,
   .result-action-bar,
-  .result-card-actions,
+  .generated-post-actions,
   .schedule-inline.compact-actions,
   .saved-post-scheduler-actions,
   .schedule-modal-actions {
@@ -3757,7 +3752,7 @@ textarea:focus {
   }
 
   .result-action-bar,
-  .result-card-actions,
+  .generated-post-actions,
   .schedule-inline.compact-actions,
   .saved-post-scheduler-actions,
   .schedule-modal-actions {
@@ -3766,7 +3761,7 @@ textarea:focus {
   }
 
   .result-action-bar button,
-  .result-card-actions button,
+  .generated-post-actions button,
   .schedule-inline.compact-actions button,
   .saved-post-scheduler-actions button,
   .schedule-modal-actions button {
@@ -3774,12 +3769,7 @@ textarea:focus {
     width: 100%;
   }
 
-  .result-card-actions .autosave-pill {
-    grid-column: 1 / -2;
-    justify-content: center;
-  }
-
-  .result-card-actions .discard-icon-button {
+  .generated-post-actions .discard-icon-button {
     width: 100%;
   }
 

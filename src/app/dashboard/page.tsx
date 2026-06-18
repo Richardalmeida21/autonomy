@@ -847,47 +847,44 @@ export default function Home() {
           {isLoading ? (
             <LoadingPostState />
           ) : result ? (
-            <div className="result-card-stack">
+            <div className="cards-grid single-card">
               <PostCard
-                hideActions
                 editable
                 label="Post gerado"
                 option={result.post}
                 onChange={updateGeneratedPost}
+                extraActions={
+                  <div className="generated-post-actions">
+                    <button
+                      className="schedule-button"
+                      type="button"
+                      onClick={() => setIsScheduleModalOpen(true)}
+                      disabled={isScheduling || isPublishingNow || !result}
+                    >
+                      <CalendarClock size={16} />
+                      Agendar
+                    </button>
+                    <button
+                      className="schedule-button now"
+                      type="button"
+                      onClick={publishCurrentPostNow}
+                      disabled={isScheduling || isPublishingNow || !result}
+                    >
+                      <Send size={16} />
+                      {isPublishingNow ? "Postando" : "Postar agora"}
+                    </button>
+                    <button
+                      className="discard-icon-button"
+                      type="button"
+                      onClick={discardCurrentPost}
+                      disabled={!result || isLoading}
+                      aria-label="Descartar post"
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                }
               />
-              <div className="result-card-actions">
-                <button
-                  className="schedule-button"
-                  type="button"
-                  onClick={() => setIsScheduleModalOpen(true)}
-                  disabled={isScheduling || isPublishingNow || !result}
-                >
-                  <CalendarClock size={16} />
-                  Agendar
-                </button>
-                <button
-                  className="schedule-button now"
-                  type="button"
-                  onClick={publishCurrentPostNow}
-                  disabled={isScheduling || isPublishingNow || !result}
-                >
-                  <Send size={16} />
-                  {isPublishingNow ? "Postando" : "Postar agora"}
-                </button>
-                <span className="autosave-pill">
-                  <Library size={16} />
-                  Salvo automaticamente
-                </span>
-                <button
-                  className="discard-icon-button"
-                  type="button"
-                  onClick={discardCurrentPost}
-                  disabled={!result || isLoading}
-                  aria-label="Descartar post"
-                >
-                  <Trash2 size={17} />
-                </button>
-              </div>
             </div>
           ) : (
             <div className="empty-state">
