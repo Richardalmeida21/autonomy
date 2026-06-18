@@ -564,7 +564,7 @@ export default function Home() {
             onClick={() => setActiveView("gerar")}
           >
             <Sparkles size={18} />
-            Gerar post
+            <span className="nav-label">Gerar post</span>
           </button>
           <button
             className={clsx(activeView === "biblioteca" && "active")}
@@ -572,7 +572,7 @@ export default function Home() {
             onClick={() => setActiveView("biblioteca")}
           >
             <Library size={18} />
-            Meus posts
+            <span className="nav-label">Meus posts</span>
             <span>{savedPosts.length}</span>
           </button>
           <button
@@ -581,7 +581,7 @@ export default function Home() {
             onClick={() => setActiveView("agenda")}
           >
             <CalendarClock size={18} />
-            Agendamentos
+            <span className="nav-label">Agendamentos</span>
             <span>{scheduledPosts.length}</span>
           </button>
           <button
@@ -590,7 +590,7 @@ export default function Home() {
             onClick={() => setActiveView("conexoes")}
           >
             <Plug size={18} />
-            Conexoes
+            <span className="nav-label">Conexoes</span>
             <span>{socialAccounts.length}</span>
           </button>
           <button
@@ -599,7 +599,7 @@ export default function Home() {
             onClick={() => setActiveView("uso")}
           >
             <BarChart3 size={18} />
-            Uso e creditos
+            <span className="nav-label">Uso e creditos</span>
           </button>
           <button
             className={clsx(activeView === "perfil" && "active")}
@@ -607,7 +607,7 @@ export default function Home() {
             onClick={() => setActiveView("perfil")}
           >
             <User size={18} />
-            Perfil
+            <span className="nav-label">Perfil</span>
           </button>
         </nav>
 
@@ -961,6 +961,13 @@ function SavedPostsLibrary({
   socialAccounts: SocialAccount[];
   posts: SavedPost[];
 }) {
+  const [libraryFilter, setLibraryFilter] = useState<"todos" | "favoritos">(
+    "todos"
+  );
+  const favoritePosts = posts.filter((post) => post.isFavorite);
+  const visiblePosts =
+    libraryFilter === "favoritos" ? favoritePosts : posts;
+
   if (error) {
     return (
       <div className="empty-state">
@@ -986,8 +993,39 @@ function SavedPostsLibrary({
   }
 
   return (
-    <div className="library-list">
-      {posts.map((savedPost) => (
+    <div className="library-stack">
+      <div className="library-filter-bar" aria-label="Filtro da biblioteca">
+        <button
+          className={clsx(libraryFilter === "todos" && "active")}
+          type="button"
+          onClick={() => setLibraryFilter("todos")}
+        >
+          <Library size={16} />
+          Todos
+          <span>{posts.length}</span>
+        </button>
+        <button
+          className={clsx(libraryFilter === "favoritos" && "active")}
+          type="button"
+          onClick={() => setLibraryFilter("favoritos")}
+        >
+          <Star size={16} />
+          Favoritos
+          <span>{favoritePosts.length}</span>
+        </button>
+      </div>
+
+      {visiblePosts.length === 0 ? (
+        <div className="empty-state compact-empty">
+          <div className="empty-icon">
+            <Star size={30} />
+          </div>
+          <h3>Nenhum favorito ainda.</h3>
+          <p>Marque posts com estrela para encontrá-los mais rapido aqui.</p>
+        </div>
+      ) : (
+        <div className="library-list">
+          {visiblePosts.map((savedPost) => (
         <div className="library-item" key={savedPost.id}>
           <div className="library-item-header">
             <div>
@@ -996,20 +1034,24 @@ function SavedPostsLibrary({
             </div>
             <div className="library-actions">
               <button
-                className={clsx(savedPost.isFavorite && "active")}
+                className={clsx("favorite-button", savedPost.isFavorite && "active")}
                 type="button"
                 onClick={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
               >
                 <Star size={16} />
                 {savedPost.isFavorite ? "Favorito" : "Favoritar"}
               </button>
-              <button type="button" onClick={() => onDelete(savedPost.id)}>
+              <button
+                className="remove-button"
+                type="button"
+                onClick={() => onDelete(savedPost.id)}
+              >
                 <Trash2 size={16} />
                 Remover
               </button>
             </div>
           </div>
-          <PostCard label="Post salvo" option={savedPost.post} />
+          <PostCard compact label="Post salvo" option={savedPost.post} />
           <SavedPostScheduler
             post={savedPost}
             socialAccounts={socialAccounts}
@@ -1017,7 +1059,9 @@ function SavedPostsLibrary({
             onSchedule={onSchedule}
           />
         </div>
-      ))}
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1463,9 +1507,11 @@ function sortSavedPosts(firstPost: SavedPost, secondPost: SavedPost) {
 }
 
 function PostCard({
+  compact = false,
   label,
   option
 }: {
+  compact?: boolean;
   label: string;
   option: GeneratedPost["post"];
 }) {
@@ -1511,7 +1557,7 @@ function PostCard({
   }
 
   return (
-    <article className="post-card">
+    <article className={clsx("post-card", compact && "compact")}>
       <div className="card-header">
         <span>{label}</span>
         <div className="card-actions">

@@ -15,6 +15,13 @@
   --success: #10B981;
   --danger: #EF4444;
   --shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  --brand-gradient: linear-gradient(135deg, #0052FF 0%, #00B8FF 100%);
+  --brand-gradient-hover: linear-gradient(135deg, #0040C7 0%, #0098D8 100%);
+  --success-gradient: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  --danger-gradient: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  --button-shadow: 0 8px 18px rgba(0, 82, 255, 0.16);
+  --success-shadow: 0 8px 18px rgba(16, 185, 129, 0.18);
+  --danger-shadow: 0 8px 18px rgba(239, 68, 68, 0.14);
 }
 
 * {
@@ -74,6 +81,7 @@ button {
   grid-template-rows: auto auto auto 1fr auto;
   gap: 24px;
   align-self: start;
+  min-width: 0;
   min-height: 100vh;
   border-right: 1px solid var(--line);
   padding: 24px;
@@ -99,7 +107,7 @@ button {
 
 .profile-summary {
   display: grid;
-  grid-template-columns: 42px 1fr;
+  grid-template-columns: 42px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   border: 1px solid var(--line);
@@ -112,6 +120,8 @@ button {
 .profile-summary strong,
 .profile-summary span {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .profile-summary strong {
@@ -220,6 +230,8 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
+  min-width: 0;
   min-height: 40px;
   border: 0;
   border-radius: 8px;
@@ -230,6 +242,19 @@ button {
   font-size: 0.9rem;
   text-align: left;
   transition: all 0.15s ease;
+}
+
+.sidebar-nav button svg,
+.signout-button svg,
+.sidebar-nav button span:not(.nav-label) {
+  flex: 0 0 auto;
+}
+
+.sidebar-nav .nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-nav button:hover {
@@ -243,7 +268,7 @@ button {
   font-weight: 600;
 }
 
-.sidebar-nav button span {
+.sidebar-nav button span:not(.nav-label) {
   display: grid;
   place-items: center;
   min-width: 22px;
@@ -256,7 +281,7 @@ button {
   font-weight: 600;
 }
 
-.sidebar-nav button.active span {
+.sidebar-nav button.active span:not(.nav-label) {
   background: rgba(0, 82, 255, 0.12);
   color: var(--accent);
 }
@@ -397,10 +422,22 @@ button {
   margin-top: 10px;
   border: 0;
   border-radius: 8px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 0 14px;
   color: #fff;
-  background: var(--surface-strong);
-  font-weight: 850;
+  background: var(--brand-gradient);
+  box-shadow: var(--button-shadow);
+  font-weight: 750;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+
+.email-notice button:hover {
+  background: var(--brand-gradient-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 .email-notice button:disabled {
@@ -606,7 +643,7 @@ button {
 }
 
 .cta-form-group button {
-  background-color: var(--m-blue);
+  background: var(--brand-gradient);
   color: #ffffff;
   border: none;
   font-size: 0.95rem;
@@ -617,14 +654,15 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: var(--button-shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   white-space: nowrap;
 }
 
 .cta-form-group button:hover {
-  background-color: var(--m-blue-hover);
+  background: var(--brand-gradient-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 82, 255, 0.2);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 .cta-disclaimer {
@@ -1455,20 +1493,22 @@ button {
 }
 
 .plan-button {
-  background-color: var(--m-blue);
+  background: var(--brand-gradient);
   color: #ffffff;
   text-align: center;
   font-weight: 700;
   padding: 12px 20px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.9rem;
-  transition: background-color 0.2s ease, transform 0.15s ease;
+  box-shadow: var(--button-shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   display: block;
 }
 
 .plan-button:hover {
-  background-color: var(--m-blue-hover);
+  background: var(--brand-gradient-hover);
   transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 /* Seção 3: FAQ Acordeão */
@@ -1719,25 +1759,27 @@ button {
 }
 
 .auth-card .primary-button {
-  background-color: #0052FF;
+  background: var(--brand-gradient);
   color: #ffffff;
   border: none;
   font-weight: 700;
-  border-radius: 6px;
+  border-radius: 8px;
   min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.15s ease;
+  box-shadow: var(--button-shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   width: 100%;
   font-size: 0.95rem;
 }
 
 .auth-card .primary-button:hover {
-  background-color: #1A66FF;
+  background: var(--brand-gradient-hover);
   transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 .auth-card .primary-button:disabled {
@@ -1899,10 +1941,10 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 38px;
+  min-height: 40px;
   border: 0;
   border-radius: 8px;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.88rem;
 }
 
@@ -2105,15 +2147,18 @@ textarea:focus {
 
 .primary-button {
   color: #ffffff;
-  background: var(--accent);
-  box-shadow: 0 4px 12px rgba(0, 82, 255, 0.12);
-  transition: all 0.2s ease;
+  background: var(--brand-gradient);
+  box-shadow: var(--button-shadow);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
 }
 
 .primary-button:hover {
-  background: var(--accent-dark);
+  background: var(--brand-gradient-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(0, 82, 255, 0.2);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 .primary-button:active {
@@ -2128,16 +2173,19 @@ textarea:focus {
 }
 
 .secondary-button {
-  border: 1px solid var(--line);
-  color: var(--ink);
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
-  transition: all 0.15s ease;
+  color: #ffffff;
+  background: var(--brand-gradient);
+  box-shadow: var(--button-shadow);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
 }
 
 .secondary-button:hover {
-  background: #F8F9FA;
-  border-color: rgba(15, 23, 42, 0.15);
+  background: var(--brand-gradient-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 .error-message {
@@ -2219,19 +2267,25 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 36px;
+  min-height: 40px;
   border: 0;
   border-radius: 8px;
   padding: 0 14px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  transition: all 0.15s ease;
+  color: #ffffff;
+  background: var(--brand-gradient);
+  box-shadow: var(--button-shadow);
+  font-size: 0.84rem;
+  font-weight: 700;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
 }
 
 .save-button {
   color: #ffffff;
-  background: var(--success);
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.15);
+  background: var(--brand-gradient);
+  box-shadow: var(--button-shadow);
 }
 
 .autosave-pill {
@@ -2249,27 +2303,41 @@ textarea:focus {
 
 .schedule-button {
   color: #ffffff;
-  background: var(--accent);
-  box-shadow: 0 2px 6px rgba(0, 82, 255, 0.15);
+  background: var(--brand-gradient);
+  box-shadow: var(--button-shadow);
 }
 
 .schedule-button:hover {
-  background: var(--accent-dark);
+  background: var(--brand-gradient-hover);
   transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 .save-button:hover {
-  background: #059669;
+  background: var(--brand-gradient-hover);
   transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
+}
+
+.schedule-button.now {
+  background: var(--success-gradient);
+  box-shadow: var(--success-shadow);
+}
+
+.schedule-button.now:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 10px 22px rgba(16, 185, 129, 0.24);
 }
 
 .discard-button {
-  color: var(--danger);
-  background: rgba(239, 68, 68, 0.06);
+  color: #ffffff;
+  background: var(--danger-gradient);
+  box-shadow: var(--danger-shadow);
 }
 
 .discard-button:hover {
-  background: rgba(239, 68, 68, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(239, 68, 68, 0.22);
 }
 
 .library-actions {
@@ -2279,14 +2347,67 @@ textarea:focus {
   gap: 8px;
 }
 
-.library-actions button.active {
-  color: #a16207;
-  background: rgba(245, 158, 11, 0.12);
+.library-actions button.favorite-button.active {
+  background: var(--brand-gradient-hover);
+}
+
+.library-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.library-filter-bar {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #F8F9FA;
+}
+
+.library-filter-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.84rem;
+  font-weight: 650;
+  transition: all 0.15s ease;
+}
+
+.library-filter-bar button.active {
+  color: var(--accent);
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.07);
+}
+
+.library-filter-bar button span {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: inherit;
+  background: rgba(15, 23, 42, 0.05);
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.library-filter-bar button.active span {
+  background: rgba(0, 82, 255, 0.1);
 }
 
 .saved-post-scheduler {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(190px, 1fr) auto auto;
+  grid-template-columns: minmax(140px, 1fr) minmax(170px, 1fr) repeat(2, minmax(0, auto));
   gap: 8px;
   padding: 14px;
   border-top: 1px solid var(--line);
@@ -2310,17 +2431,34 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 38px;
+  min-height: 40px;
   border: 0;
   border-radius: 8px;
   padding: 0 14px;
   color: #ffffff;
-  background: var(--accent);
+  background: var(--brand-gradient);
+  box-shadow: var(--button-shadow);
   font-weight: 700;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+
+.saved-post-scheduler button:hover {
+  background: var(--brand-gradient-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 .saved-post-scheduler button.now {
-  background: var(--success);
+  background: var(--success-gradient);
+  box-shadow: var(--success-shadow);
+}
+
+.saved-post-scheduler button.now:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 10px 22px rgba(16, 185, 129, 0.24);
 }
 
 .saved-post-scheduler span {
@@ -2353,6 +2491,7 @@ textarea:focus {
   display: grid;
   gap: 20px;
   align-content: start;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 20px;
@@ -2360,11 +2499,27 @@ textarea:focus {
   box-shadow: 0 4px 20px rgba(15, 23, 42, 0.01);
 }
 
+.post-card.compact {
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  grid-template-areas:
+    "media header"
+    "media copy"
+    "media tags";
+  gap: 14px 18px;
+  padding: 14px;
+}
+
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+}
+
+.post-card.compact .card-header {
+  grid-area: header;
+  align-items: flex-start;
 }
 
 .card-header > span {
@@ -2380,25 +2535,39 @@ textarea:focus {
   gap: 8px;
 }
 
+.post-card.compact .card-actions {
+  flex: 0 0 auto;
+}
+
 .card-header button {
-  min-height: 32px;
-  padding: 0 12px;
-  color: var(--ink);
-  border: 1px solid var(--line);
-  background: #ffffff;
-  font-size: 0.8rem;
-  font-weight: 600;
-  transition: all 0.15s ease;
+  min-height: 38px;
+  padding: 0 13px;
+  color: #ffffff;
+  border: 0;
+  background: var(--brand-gradient);
+  box-shadow: var(--button-shadow);
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
 }
 
 .card-header button:hover {
-  background: #F8F9FA;
-  border-color: rgba(15, 23, 42, 0.15);
+  background: var(--brand-gradient-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
 }
 
 .library-list {
   display: grid;
-  gap: 20px;
+  gap: 14px;
+}
+
+.compact-empty {
+  min-height: 260px;
+  padding: 32px 20px;
 }
 
 .social-panel,
@@ -2475,13 +2644,19 @@ textarea:focus {
 
 .account-item button,
 .schedule-item button {
-  min-height: 34px;
+  min-height: 40px;
   border: 0;
   border-radius: 8px;
-  padding: 0 12px;
-  color: var(--danger);
-  background: rgba(239, 68, 68, 0.06);
-  font-weight: 650;
+  padding: 0 14px;
+  color: #ffffff;
+  background: var(--danger-gradient);
+  box-shadow: var(--danger-shadow);
+  font-size: 0.84rem;
+  font-weight: 700;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
 }
 
 .status-pill {
@@ -2556,10 +2731,11 @@ textarea:focus {
 
 .library-item {
   display: grid;
-  gap: 16px;
+  gap: 12px;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 18px;
+  padding: 14px;
   background: #F8F9FA;
 }
 
@@ -2568,6 +2744,11 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  min-width: 0;
+}
+
+.library-item-header > div:first-child {
+  min-width: 0;
 }
 
 .library-item-header h3 {
@@ -2577,15 +2758,28 @@ textarea:focus {
   font-weight: 700;
   color: var(--ink);
   line-height: 1.3;
-}
-
-.library-item-header button {
-  color: var(--danger);
-  background: rgba(239, 68, 68, 0.06);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .library-item-header button:hover {
-  background: rgba(239, 68, 68, 0.1);
+  transform: translateY(-1px);
+}
+
+.library-item-header .remove-button,
+.account-item button,
+.schedule-item button {
+  color: #ffffff;
+  background: var(--danger-gradient);
+  box-shadow: var(--danger-shadow);
+}
+
+.library-item-header .remove-button:hover,
+.account-item button:hover,
+.schedule-item button:hover {
+  background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+  box-shadow: 0 10px 22px rgba(239, 68, 68, 0.22);
 }
 
 .mock-cover {
@@ -2603,6 +2797,31 @@ textarea:focus {
 
 .generated-media {
   display: grid;
+  min-width: 0;
+}
+
+.post-card.compact .generated-media {
+  grid-area: media;
+}
+
+.post-card.compact .mock-cover,
+.post-card.compact .carousel-stage {
+  height: 164px;
+  aspect-ratio: auto;
+}
+
+.post-card.compact .media-carousel {
+  gap: 8px;
+}
+
+.post-card.compact .carousel-controls {
+  grid-template-columns: 30px 1fr 30px;
+  gap: 6px;
+}
+
+.post-card.compact .carousel-controls > button {
+  width: 30px;
+  height: 30px;
 }
 
 .mock-cover img {
@@ -2709,6 +2928,11 @@ textarea:focus {
 .card-section {
   display: grid;
   gap: 8px;
+  min-width: 0;
+}
+
+.post-card.compact .card-section {
+  grid-area: copy;
 }
 
 .card-section h3 {
@@ -2724,10 +2948,25 @@ textarea:focus {
   white-space: pre-wrap;
 }
 
+.post-card.compact .caption-text {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 .hashtags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
+}
+
+.post-card.compact .hashtags {
+  grid-area: tags;
+  max-height: 58px;
+  overflow: hidden;
 }
 
 .hashtags span {
@@ -2925,6 +3164,10 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .saved-post-scheduler {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .profile-grid,
   .metrics-grid {
     grid-template-columns: 1fr;
@@ -2944,6 +3187,51 @@ textarea:focus {
 
   .topbar {
     display: grid;
+  }
+
+  .dashboard-main {
+    padding: 18px;
+  }
+
+  .dashboard-section {
+    padding: 20px;
+  }
+
+  .sidebar-nav,
+  .saved-post-scheduler,
+  .post-card.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .post-card.compact {
+    grid-template-areas:
+      "header"
+      "media"
+      "copy"
+      "tags";
+  }
+
+  .library-item-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .library-actions {
+    width: 100%;
+  }
+
+  .library-actions button {
+    flex: 1 1 140px;
+  }
+
+  .library-filter-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-self: stretch;
+  }
+
+  .library-filter-bar button {
+    min-width: 0;
   }
 
   .marketing-nav {
