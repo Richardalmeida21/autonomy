@@ -38,8 +38,13 @@ export async function saveProfile(profile: ProfileInput) {
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  let { data } = await supabase.auth.getSession();
+  let token = data.session?.access_token;
+
+  if (!token) {
+    ({ data } = await supabase.auth.refreshSession());
+    token = data.session?.access_token;
+  }
 
   return token ? { Authorization: `Bearer ${token}` } : {};
 }

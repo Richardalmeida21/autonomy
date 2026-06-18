@@ -51,6 +51,7 @@ import { getUsageSummary, type UsageSummary } from "@/lib/usage-client";
 type Mode = "criativo" | "contextual";
 type VisualFormat = "imagem_unica" | "carrossel";
 type ActiveView = "gerar" | "biblioteca" | "agenda" | "conexoes" | "perfil" | "uso";
+type Language = "pt" | "en";
 type DashboardProfile = {
   email: string;
   emailConfirmed: boolean;
@@ -59,6 +60,12 @@ type DashboardProfile = {
   phone: string;
   plan: string;
 };
+
+const usageSummaryStorageKey = "autonomy.usageSummary";
+
+function tx(language: Language, pt: string, en: string) {
+  return language === "en" ? en : pt;
+}
 
 const examples = {
   creative: {
@@ -77,6 +84,7 @@ const examples = {
 };
 
 export default function Home() {
+  const [language, setLanguage] = useState<Language>("pt");
   const [mode, setMode] = useState<Mode>("criativo");
   const [activeView, setActiveView] = useState<ActiveView>("gerar");
   const [visualFormat, setVisualFormat] = useState<VisualFormat>("imagem_unica");
@@ -115,8 +123,26 @@ export default function Home() {
   useEffect(() => {
     const supabase = getSupabaseClient();
     const params = new URLSearchParams(window.location.search);
+    const nextLanguage = params.get("lang") === "en" ? "en" : null;
     const metaError = params.get("meta_error");
     const metaConnected = params.get("meta_connected");
+
+    if (nextLanguage) {
+      window.localStorage.setItem("autonomy.language", nextLanguage);
+      setLanguage(nextLanguage);
+    } else if (window.localStorage.getItem("autonomy.language") === "en") {
+      setLanguage("en");
+    }
+
+    const cachedUsageSummary = window.localStorage.getItem(usageSummaryStorageKey);
+
+    if (cachedUsageSummary) {
+      try {
+        setUsageSummary(JSON.parse(cachedUsageSummary) as UsageSummary);
+      } catch {
+        window.localStorage.removeItem(usageSummaryStorageKey);
+      }
+    }
 
     if (metaError) {
       setScheduleError(decodeURIComponent(metaError));
@@ -124,7 +150,9 @@ export default function Home() {
     }
 
     if (metaConnected) {
-      setScheduleMessage("Instagram conectado com sucesso.");
+      setScheduleMessage(
+        tx(nextLanguage || "pt", "Instagram conectado com sucesso.", "Instagram connected successfully.")
+      );
       setActiveView("conexoes");
     }
 
@@ -136,7 +164,7 @@ export default function Home() {
       const user = data.user;
 
       if (!user) {
-        window.location.href = "/login";
+        window.location.href = language === "en" ? "/login?lang=en" : "/login";
         return;
       }
 
@@ -169,21 +197,25 @@ export default function Home() {
         setLibraryError(null);
       })
       .catch(() =>
-        setLibraryError("Nao foi possivel carregar a biblioteca de posts.")
+        setLibraryError(
+          tx(language, "Não foi possível carregar a biblioteca de posts.", "Could not load the post library.")
+        )
       );
 
     refreshUsageSummary().catch(() => undefined);
     refreshSocialData().catch(() => undefined);
-  }, []);
+  }, [language]);
 
   const activePlan = getPlan(profile.plan) || plans[1];
-  const creditLimit = usageSummary?.creditsLimit || activePlan.creditLimit;
-  const usedCredits = usageSummary?.usedCredits || 0;
+  const creditLimit = usageSummary?.creditsLimit ?? activePlan.creditLimit;
+  const usedCredits = usageSummary?.usedCredits ?? 0;
   const remainingCredits =
-    usageSummary?.remainingCredits || Math.max(creditLimit - usedCredits, 0);
+    usageSummary?.remainingCredits ?? Math.max(creditLimit - usedCredits, 0);
   const usagePercent =
-    usageSummary?.usagePercent ||
+    usageSummary?.usagePercent ??
     Math.min(Math.round((usedCredits / creditLimit) * 100), 100);
+  const visibleScheduledPosts = getVisibleScheduledPosts(scheduledPosts);
+  const sidebarScheduledCount = visibleScheduledPosts.length;
 
   const payload = useMemo(() => {
     if (mode === "criativo") {
@@ -237,30 +269,25 @@ export default function Home() {
 
     try {
       if (mode === "contextual" && !imagePreview) {
-        throw new Error("Envie uma imagem para gerar o post contextual.");
+        throw new Error(
+          tx(language, "Envie uma imagem para gerar o post contextual.", "Upload an image to generate a contextual post.")
+        );
       }
 
-      const supabase = getSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
 
-      if (!token) {
-        throw new Error("Sessao expirada. Entre novamente para gerar posts.");
-      }
-
-      const response = await fetch("/api/generate-post", {
+      const response = await fetchWithFreshSession("/api/generate-post", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Nao foi possivel gerar os posts.");
+        throw new Error(
+          data.error ||
+            tx(language, "Não foi possível gerar os posts.", "Could not generate the posts.")
+        );
       }
 
       setResult(data);
@@ -271,7 +298,7 @@ export default function Home() {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Erro inesperado ao gerar."
+          : tx(language, "Erro inesperado ao gerar.", "Unexpected generation error.")
       );
     } finally {
       setIsLoading(false);
@@ -281,6 +308,58 @@ export default function Home() {
   async function refreshUsageSummary() {
     const summary = await getUsageSummary();
     setUsageSummary(summary);
+    window.localStorage.setItem(usageSummaryStorageKey, JSON.stringify(summary));
+  }
+
+  async function fetchWithFreshSession(input: RequestInfo | URL, init: RequestInit = {}) {
+    const supabase = getSupabaseClient();
+    const sessionResponse = await supabase.auth.getSession();
+    let token = sessionResponse.data.session?.access_token;
+
+    if (!token) {
+      const refreshResponse = await supabase.auth.refreshSession();
+      token = refreshResponse.data.session?.access_token;
+    }
+
+    if (!token) {
+      throw new Error(
+        tx(language, "Sessão expirada. Entre novamente para gerar posts.", "Your session expired. Sign in again to generate posts.")
+      );
+    }
+
+    const buildInit = (nextToken: string): RequestInit => ({
+      ...init,
+      headers: {
+        ...(init.headers || {}),
+        Authorization: `Bearer ${nextToken}`
+      }
+    });
+
+    let response: Response;
+
+    try {
+      response = await fetch(input, buildInit(token));
+    } catch (caughtError) {
+      const refreshResponse = await supabase.auth.refreshSession();
+      const refreshedToken = refreshResponse.data.session?.access_token;
+
+      if (!refreshedToken) {
+        throw caughtError;
+      }
+
+      response = await fetch(input, buildInit(refreshedToken));
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      const refreshResponse = await supabase.auth.refreshSession();
+      const refreshedToken = refreshResponse.data.session?.access_token;
+
+      if (refreshedToken) {
+        return fetch(input, buildInit(refreshedToken));
+      }
+    }
+
+    return response;
   }
 
   async function refreshSocialData() {
@@ -360,7 +439,7 @@ export default function Home() {
       setScheduleError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Nao foi possivel conectar Instagram."
+          : tx(language, "Não foi possível conectar Instagram.", "Could not connect Instagram.")
       );
     }
   }
@@ -376,11 +455,15 @@ export default function Home() {
 
     try {
       if (!socialAccountId) {
-        throw new Error("Conecte e selecione uma conta do Instagram.");
+        throw new Error(
+          tx(language, "Conecte e selecione uma conta do Instagram.", "Connect and select an Instagram account.")
+        );
       }
 
       if (!dateTime) {
-        throw new Error("Escolha data e horario para publicar.");
+        throw new Error(
+          tx(language, "Escolha data e horário para publicar.", "Choose a publishing date and time.")
+        );
       }
 
       await schedulePost({
@@ -391,14 +474,14 @@ export default function Home() {
       setSelectedSocialAccountId(socialAccountId);
       setScheduleDateTime(dateTime);
       await refreshSocialData();
-      setScheduleMessage("Post agendado com sucesso.");
+      setScheduleMessage(tx(language, "Post agendado com sucesso.", "Post scheduled successfully."));
       setIsScheduleModalOpen(false);
       setActiveView("agenda");
     } catch (caughtError) {
       setScheduleError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Nao foi possivel agendar este post."
+          : tx(language, "Não foi possível agendar este post.", "Could not schedule this post.")
       );
     } finally {
       setIsScheduling(false);
@@ -416,7 +499,9 @@ export default function Home() {
 
     try {
       if (!selectedSocialAccountId) {
-        throw new Error("Conecte e selecione uma conta do Instagram.");
+        throw new Error(
+          tx(language, "Conecte e selecione uma conta do Instagram.", "Connect and select an Instagram account.")
+        );
       }
 
       await schedulePost({
@@ -425,13 +510,13 @@ export default function Home() {
         socialAccountId: selectedSocialAccountId
       });
       await refreshSocialData();
-      setScheduleMessage("Post publicado no Instagram.");
+      setScheduleMessage(tx(language, "Post publicado no Instagram.", "Post published on Instagram."));
       setActiveView("agenda");
     } catch (caughtError) {
       setScheduleError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Nao foi possivel publicar este post agora."
+          : tx(language, "Não foi possível publicar este post agora.", "Could not publish this post now.")
       );
     } finally {
       setIsPublishingNow(false);
@@ -450,13 +535,13 @@ export default function Home() {
         socialAccountId
       });
       await refreshSocialData();
-      setScheduleMessage("Post agendado com sucesso.");
+      setScheduleMessage(tx(language, "Post agendado com sucesso.", "Post scheduled successfully."));
       setActiveView("agenda");
     } catch (caughtError) {
       setScheduleError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Nao foi possivel agendar este post."
+          : tx(language, "Não foi possível agendar este post.", "Could not schedule this post.")
       );
     }
   }
@@ -473,13 +558,13 @@ export default function Home() {
         socialAccountId
       });
       await refreshSocialData();
-      setScheduleMessage("Post publicado no Instagram.");
+      setScheduleMessage(tx(language, "Post publicado no Instagram.", "Post published on Instagram."));
       setActiveView("agenda");
     } catch (caughtError) {
       setScheduleError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Nao foi possivel publicar este post agora."
+          : tx(language, "Não foi possível publicar este post agora.", "Could not publish this post now.")
       );
     }
   }
@@ -493,7 +578,7 @@ export default function Home() {
       setSelectedSocialAccountId((current) => (current === id ? "" : current));
       await refreshSocialData();
     } catch {
-      setScheduleError("Nao foi possivel desconectar a conta.");
+      setScheduleError(tx(language, "Não foi possível desconectar a conta.", "Could not disconnect the account."));
     }
   }
 
@@ -502,7 +587,7 @@ export default function Home() {
       await cancelScheduledPost(id);
       await refreshSocialData();
     } catch {
-      setScheduleError("Nao foi possivel cancelar o agendamento.");
+      setScheduleError(tx(language, "Não foi possível cancelar o agendamento.", "Could not cancel the scheduled post."));
     }
   }
 
@@ -522,7 +607,7 @@ export default function Home() {
       await deletePost(id);
       setSavedPosts(savedPosts.filter((post) => post.id !== id));
     } catch {
-      setError("Nao foi possivel remover este post da biblioteca.");
+      setError(tx(language, "Não foi possível remover este post da biblioteca.", "Could not remove this post from the library."));
     }
   }
 
@@ -538,7 +623,7 @@ export default function Home() {
       await updatePostFavorite(id, isFavorite);
     } catch {
       setSavedPosts(previousPosts);
-      setError("Nao foi possivel atualizar o favorito.");
+      setError(tx(language, "Não foi possível atualizar o favorito.", "Could not update the favorite status."));
     }
   }
 
@@ -565,20 +650,26 @@ export default function Home() {
           <div className="profile-avatar">{getInitials(profile.name)}</div>
           <div>
             <strong>{profile.name}</strong>
-            <span>{profile.email || "Conta conectada"}</span>
+            <span>{profile.email || tx(language, "Conta conectada", "Connected account")}</span>
           </div>
         </div>
 
         <div className="sidebar-credits">
           <div>
-            <span>Creditos</span>
-            <strong>{remainingCredits}</strong>
+            <span>{tx(language, "Créditos", "Credits")}</span>
+            <strong>{usageSummary ? remainingCredits : "..."}</strong>
           </div>
           <div className="usage-bar">
             <span style={{ width: `${usagePercent}%` }} />
           </div>
           <p>
-            {usedCredits} de {creditLimit} usados ({usagePercent}%)
+            {usageSummary
+              ? tx(
+                  language,
+                  `${usedCredits} de ${creditLimit} usados (${usagePercent}%)`,
+                  `${usedCredits} of ${creditLimit} used (${usagePercent}%)`
+                )
+              : tx(language, "Carregando créditos...", "Loading credits...")}
           </p>
         </div>
 
@@ -589,7 +680,7 @@ export default function Home() {
             onClick={() => setActiveView("gerar")}
           >
             <Sparkles size={18} />
-            <span className="nav-label">Gerar post</span>
+            <span className="nav-label">{tx(language, "Gerar post", "Generate post")}</span>
           </button>
           <button
             className={clsx(activeView === "biblioteca" && "active")}
@@ -597,7 +688,7 @@ export default function Home() {
             onClick={() => setActiveView("biblioteca")}
           >
             <Library size={18} />
-            <span className="nav-label">Meus posts</span>
+            <span className="nav-label">{tx(language, "Meus posts", "My posts")}</span>
             <span>{savedPosts.length}</span>
           </button>
           <button
@@ -606,8 +697,8 @@ export default function Home() {
             onClick={() => setActiveView("agenda")}
           >
             <CalendarClock size={18} />
-            <span className="nav-label">Agendamentos</span>
-            <span>{scheduledPosts.length}</span>
+            <span className="nav-label">{tx(language, "Agendamentos", "Schedule")}</span>
+            <span>{sidebarScheduledCount}</span>
           </button>
           <button
             className={clsx(activeView === "conexoes" && "active")}
@@ -615,7 +706,7 @@ export default function Home() {
             onClick={() => setActiveView("conexoes")}
           >
             <Plug size={18} />
-            <span className="nav-label">Conexoes</span>
+            <span className="nav-label">{tx(language, "Conexões", "Connections")}</span>
             <span>{socialAccounts.length}</span>
           </button>
           <button
@@ -624,7 +715,7 @@ export default function Home() {
             onClick={() => setActiveView("uso")}
           >
             <BarChart3 size={18} />
-            <span className="nav-label">Uso e creditos</span>
+            <span className="nav-label">{tx(language, "Uso e créditos", "Usage and credits")}</span>
           </button>
           <button
             className={clsx(activeView === "perfil" && "active")}
@@ -632,13 +723,25 @@ export default function Home() {
             onClick={() => setActiveView("perfil")}
           >
             <User size={18} />
-            <span className="nav-label">Perfil</span>
+            <span className="nav-label">{tx(language, "Perfil", "Profile")}</span>
           </button>
         </nav>
 
+        <button
+          className="language-toggle"
+          type="button"
+          onClick={() => {
+            const nextLanguage = language === "en" ? "pt" : "en";
+            window.localStorage.setItem("autonomy.language", nextLanguage);
+            setLanguage(nextLanguage);
+          }}
+        >
+          {language === "en" ? "Português" : "English"}
+        </button>
+
         <button className="signout-button" type="button" onClick={signOut}>
           <LogOut size={18} />
-          Sair
+          {tx(language, "Sair", "Sign out")}
         </button>
       </aside>
 
@@ -653,17 +756,19 @@ export default function Home() {
                   height={24} 
                   style={{ width: "auto", height: "24px", objectFit: "contain", marginBottom: "4px" }}
                 />
-                <h1 className="form-title">Gerador de posts pronto para vender</h1>
+                <h1 className="form-title">
+                  {tx(language, "Gere seu post", "Generate your post")}
+                </h1>
               </div>
 
-          <div className="mode-switch" aria-label="Modo de geracao">
+          <div className="mode-switch" aria-label={tx(language, "Modo de geração", "Generation mode")}>
             <button
               className={clsx(mode === "criativo" && "active")}
               type="button"
               onClick={() => setMode("criativo")}
             >
               <Sparkles size={17} />
-              Criativo
+              {tx(language, "Criativo", "Creative")}
             </button>
             <button
               className={clsx(mode === "contextual" && "active")}
@@ -671,65 +776,69 @@ export default function Home() {
               onClick={() => setMode("contextual")}
             >
               <ImagePlus size={17} />
-              Contextual
+              {tx(language, "Contextual", "Contextual")}
             </button>
           </div>
 
           <form onSubmit={onSubmit} className="form-stack">
             <label>
-              <span>Nicho</span>
+              <span>{tx(language, "Nicho", "Niche")}</span>
               <input
                 value={niche}
                 onChange={(event) => setNiche(event.target.value)}
-                placeholder="Ex: Nutricionista, imobiliaria, academia"
+                placeholder={tx(language, "Ex: Nutricionista, imobiliária, academia", "Ex: Nutritionist, real estate, fitness studio")}
               />
             </label>
 
             <label>
-              <span>Tema</span>
+              <span>{tx(language, "Tema", "Topic")}</span>
               <input
                 value={theme}
                 onChange={(event) => setTheme(event.target.value)}
-                placeholder="Ex: Como atrair clientes no Instagram"
+                placeholder={tx(language, "Ex: Como atrair clientes no Instagram", "Ex: How to attract clients on Instagram")}
               />
             </label>
 
             {mode === "criativo" && (
               <>
                 <div className="field-group">
-                  <span>Formato visual</span>
-                  <div className="choice-grid" aria-label="Formato visual">
+                  <span>{tx(language, "Formato visual", "Visual format")}</span>
+                  <div className="choice-grid" aria-label={tx(language, "Formato visual", "Visual format")}>
                     <button
                       className={clsx(visualFormat === "imagem_unica" && "active")}
                       type="button"
                       onClick={() => setVisualFormat("imagem_unica")}
                     >
-                      Imagem unica
+                      {tx(language, "Imagem única", "Single image")}
                     </button>
                     <button
                       className={clsx(visualFormat === "carrossel" && "active")}
                       type="button"
                       onClick={() => setVisualFormat("carrossel")}
                     >
-                      Carrossel
+                      {tx(language, "Carrossel", "Carousel")}
                     </button>
                   </div>
                 </div>
 
                 {visualFormat === "imagem_unica" ? (
                   <label>
-                    <span>Detalhes da imagem</span>
+                    <span>{tx(language, "Detalhes da imagem", "Image details")}</span>
                     <textarea
                       value={singleImageDetail}
                       onChange={(event) => setSingleImageDetail(event.target.value)}
-                      placeholder="Descreva exatamente o que deve aparecer: pessoa, objeto, ambiente, cores, enquadramento e clima."
+                      placeholder={tx(
+                        language,
+                        "Descreva exatamente o que deve aparecer: pessoa, objeto, ambiente, cores, enquadramento e clima.",
+                        "Describe exactly what should appear: person, object, setting, colors, framing, and mood."
+                      )}
                       rows={4}
                     />
                   </label>
                 ) : (
                   <div className="form-stack nested-stack">
                     <div className="field-group">
-                      <span>Quantidade de imagens</span>
+                      <span>{tx(language, "Quantidade de imagens", "Number of images")}</span>
                       <div className="stepper-grid">
                         {[2, 3, 4].map((count) => (
                           <button
@@ -743,19 +852,27 @@ export default function Home() {
                         ))}
                       </div>
                       <p className="field-hint">
-                        Para texto no slide, escreva a frase final entre aspas.
+                        {tx(
+                          language,
+                          "Para texto no slide, escreva a frase final entre aspas.",
+                          "For slide text, write the final phrase in quotation marks."
+                        )}
                       </p>
                     </div>
 
                     {Array.from({ length: carouselCount }, (_, index) => (
                       <label key={index}>
-                        <span>Imagem {index + 1}</span>
+                        <span>{tx(language, "Imagem", "Image")} {index + 1}</span>
                         <textarea
                           value={carouselDetails[index] || ""}
                           onChange={(event) =>
                             updateCarouselDetail(index, event.target.value)
                           }
-                          placeholder={`Descreva exatamente a imagem ${index + 1}. Se quiser texto, escreva o texto final entre aspas.`}
+                          placeholder={tx(
+                            language,
+                            `Descreva exatamente a imagem ${index + 1}. Se quiser texto, escreva o texto final entre aspas.`,
+                            `Describe image ${index + 1} exactly. If you want text, write the final text in quotation marks.`
+                          )}
                           rows={4}
                         />
                       </label>
@@ -768,11 +885,11 @@ export default function Home() {
             {mode === "contextual" && (
               <>
                 <label>
-                  <span>Contexto da campanha</span>
+                  <span>{tx(language, "Contexto da campanha", "Campaign context")}</span>
                   <textarea
                     value={context}
                     onChange={(event) => setContext(event.target.value)}
-                    placeholder="Explique a promessa, oferta ou ponto que precisa aparecer no post."
+                    placeholder={tx(language, "Explique a promessa, oferta ou ponto que precisa aparecer no post.", "Explain the promise, offer, or key point that must appear in the post.")}
                     rows={4}
                   />
                 </label>
@@ -780,13 +897,13 @@ export default function Home() {
                 <div className="upload-box">
                   <div className="upload-preview">
                     {imagePreview ? (
-                      <img src={imagePreview} alt="Preview da imagem enviada" />
+                      <img src={imagePreview} alt={tx(language, "Preview da imagem enviada", "Uploaded image preview")} />
                     ) : (
                       <UploadCloud size={28} />
                     )}
                   </div>
                   <label className="file-trigger">
-                    <span>Enviar imagem</span>
+                    <span>{tx(language, "Enviar imagem", "Upload image")}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -796,11 +913,15 @@ export default function Home() {
                 </div>
 
                 <label>
-                  <span>Analise da imagem</span>
+                  <span>{tx(language, "Análise da imagem", "Image analysis")}</span>
                   <textarea
                     value={imageAnalysis}
                     onChange={(event) => setImageAnalysis(event.target.value)}
-                    placeholder="Descreva a imagem. Em producao, este campo pode ser preenchido automaticamente por visao."
+                    placeholder={tx(
+                      language,
+                      "Descreva a imagem. Em produção, este campo pode ser preenchido automaticamente por visão.",
+                      "Describe the image. In production, this field can be filled automatically by vision analysis."
+                    )}
                     rows={4}
                   />
                 </label>
@@ -811,11 +932,11 @@ export default function Home() {
 
             <div className="button-row">
               <button className="secondary-button" type="button" onClick={fillExample}>
-                Exemplo
+                {tx(language, "Exemplo", "Example")}
               </button>
               <button className="primary-button" type="submit" disabled={isLoading}>
                 <ArrowRight size={18} />
-                Gerar posts completos
+                {tx(language, "Gerar posts completos", "Generate complete posts")}
               </button>
             </div>
           </form>
@@ -824,8 +945,8 @@ export default function Home() {
             <section className="results-area">
           <div className="topbar">
             <div>
-              <p className="eyebrow">Saida estruturada</p>
-              <h2>Post completo pronto para o calendario</h2>
+                  <p className="eyebrow">{tx(language, "Saída estruturada", "Structured output")}</p>
+              <h2>{tx(language, "Confira seu post gerado", "Review your generated post")}</h2>
             </div>
           </div>
 
@@ -835,6 +956,7 @@ export default function Home() {
             <ScheduleModal
               accounts={socialAccounts}
               dateTime={scheduleDateTime}
+              language={language}
               isSubmitting={isScheduling}
               onClose={() => setIsScheduleModalOpen(false)}
               onConfirm={(socialAccountId, dateTime) =>
@@ -845,14 +967,15 @@ export default function Home() {
           )}
 
           {isLoading ? (
-            <LoadingPostState />
+            <LoadingPostState language={language} />
           ) : result ? (
             <div className="cards-grid single-card">
               <PostCard
                 hideBuiltInActions
                 editable
-                label="Post gerado"
+                label={tx(language, "Post gerado", "Generated post")}
                 option={result.post}
+                language={language}
                 onChange={updateGeneratedPost}
                 extraActions={
                   <div className="generated-post-actions">
@@ -863,7 +986,7 @@ export default function Home() {
                       disabled={isScheduling || isPublishingNow || !result}
                     >
                       <CalendarClock size={16} />
-                      Agendar
+                      {tx(language, "Agendar", "Schedule")}
                     </button>
                     <button
                       className="schedule-button now"
@@ -872,14 +995,16 @@ export default function Home() {
                       disabled={isScheduling || isPublishingNow || !result}
                     >
                       <Send size={16} />
-                      {isPublishingNow ? "Postando" : "Postar agora"}
+                      {isPublishingNow
+                        ? tx(language, "Postando", "Publishing")
+                        : tx(language, "Postar agora", "Publish now")}
                     </button>
                     <button
                       className="discard-icon-button"
                       type="button"
                       onClick={discardCurrentPost}
                       disabled={!result || isLoading}
-                      aria-label="Descartar post"
+                      aria-label={tx(language, "Descartar post", "Discard post")}
                     >
                       <Trash2 size={17} />
                     </button>
@@ -892,10 +1017,13 @@ export default function Home() {
               <div className="empty-icon">
                 <Sparkles size={30} />
               </div>
-              <h3>Seu post completo aparece aqui.</h3>
+              <h3>{tx(language, "Seu post completo aparece aqui.", "Your complete post appears here.")}</h3>
               <p>
-                Preencha o briefing e receba imagem, descricao, hashtags e
-                direcao visual em uma unica geracao economica.
+                {tx(
+                  language,
+                  "Preencha o briefing e receba imagem, descrição, hashtags e direção visual em uma única geração econômica.",
+                  "Fill out the brief and receive the image, caption, hashtags, and visual direction in one efficient generation."
+                )}
               </p>
             </div>
           )}
@@ -904,9 +1032,13 @@ export default function Home() {
         )}
 
         {activeView === "biblioteca" && (
-          <DashboardSection eyebrow="Biblioteca" title="Meus posts salvos">
+          <DashboardSection
+            eyebrow={tx(language, "Biblioteca", "Library")}
+            title={tx(language, "Meus posts salvos", "My saved posts")}
+          >
             <SavedPostsLibrary
               error={libraryError}
+              language={language}
               onFavorite={toggleSavedPostFavorite}
               onPublishNow={publishSavedPostNow}
               onSchedule={scheduleSavedPost}
@@ -918,9 +1050,13 @@ export default function Home() {
         )}
 
         {activeView === "agenda" && (
-          <DashboardSection eyebrow="Calendario" title="Posts agendados">
+          <DashboardSection
+            eyebrow={tx(language, "Calendário", "Calendar")}
+            title={tx(language, "Posts agendados", "Scheduled posts")}
+          >
             <ScheduledPostsPanel
               accounts={socialAccounts}
+              language={language}
               posts={scheduledPosts}
               onCancel={cancelSchedule}
             />
@@ -928,10 +1064,11 @@ export default function Home() {
         )}
 
         {activeView === "conexoes" && (
-          <DashboardSection eyebrow="Canais" title="Instagram">
+          <DashboardSection eyebrow={tx(language, "Canais", "Channels")} title="Instagram">
             <SocialAccountsPanel
               accounts={socialAccounts}
               error={scheduleError}
+              language={language}
               onConnect={connectInstagram}
               onDisconnect={removeSocialAccount}
             />
@@ -941,6 +1078,7 @@ export default function Home() {
         {activeView === "uso" && (
           <UsagePanel
             creditLimit={creditLimit}
+            language={language}
             remainingCredits={remainingCredits}
             savedPosts={savedPosts}
             usedCredits={usedCredits}
@@ -949,7 +1087,7 @@ export default function Home() {
         )}
 
         {activeView === "perfil" && (
-          <ProfilePanel planName={activePlan.name} profile={profile} />
+          <ProfilePanel language={language} planName={activePlan.name} profile={profile} />
         )}
       </section>
     </main>
@@ -958,6 +1096,7 @@ export default function Home() {
 
 function SavedPostsLibrary({
   error,
+  language,
   onDelete,
   onFavorite,
   onPublishNow,
@@ -966,6 +1105,7 @@ function SavedPostsLibrary({
   posts
 }: {
   error: string | null;
+  language: Language;
   onDelete: (id: string) => void | Promise<void>;
   onFavorite: (id: string, isFavorite: boolean) => void | Promise<void>;
   onPublishNow: (post: SavedPost, socialAccountId: string) => void | Promise<void>;
@@ -990,7 +1130,7 @@ function SavedPostsLibrary({
         <div className="empty-icon">
           <Sparkles size={30} />
         </div>
-        <h3>Biblioteca indisponivel.</h3>
+        <h3>{tx(language, "Biblioteca indisponível.", "Library unavailable.")}</h3>
         <p>{error}</p>
       </div>
     );
@@ -1002,22 +1142,22 @@ function SavedPostsLibrary({
           <div className="empty-icon">
             <Sparkles size={30} />
           </div>
-        <h3>Nenhum post gerado ainda.</h3>
-        <p>Todo post gerado aparece aqui automaticamente.</p>
+        <h3>{tx(language, "Nenhum post gerado ainda.", "No posts generated yet.")}</h3>
+        <p>{tx(language, "Todo post gerado aparece aqui automaticamente.", "Every generated post appears here automatically.")}</p>
       </div>
     );
   }
 
   return (
     <div className="library-stack">
-      <div className="library-filter-bar" aria-label="Filtro da biblioteca">
+      <div className="library-filter-bar" aria-label={tx(language, "Filtro da biblioteca", "Library filter")}>
         <button
           className={clsx(libraryFilter === "todos" && "active")}
           type="button"
           onClick={() => setLibraryFilter("todos")}
         >
           <Library size={16} />
-          Todos
+          {tx(language, "Todos", "All")}
           <span>{posts.length}</span>
         </button>
         <button
@@ -1026,7 +1166,7 @@ function SavedPostsLibrary({
           onClick={() => setLibraryFilter("favoritos")}
         >
           <Star size={16} />
-          Favoritos
+          {tx(language, "Favoritos", "Favorites")}
           <span>{favoritePosts.length}</span>
         </button>
       </div>
@@ -1036,7 +1176,7 @@ function SavedPostsLibrary({
           <div className="empty-icon">
             <Star size={30} />
           </div>
-          <h3>Nenhum favorito ainda.</h3>
+          <h3>{tx(language, "Nenhum favorito ainda.", "No favorites yet.")}</h3>
           <p>Marque posts com estrela para encontrá-los mais rapido aqui.</p>
         </div>
       ) : (
@@ -1046,9 +1186,11 @@ function SavedPostsLibrary({
               <LibraryPostPreview
                 onDelete={() => onDelete(savedPost.id)}
                 onFavorite={() => onFavorite(savedPost.id, !savedPost.isFavorite)}
+                language={language}
                 post={savedPost}
               />
               <SavedPostScheduler
+                language={language}
                 post={savedPost}
                 socialAccounts={socialAccounts}
                 onPublishNow={onPublishNow}
@@ -1063,10 +1205,12 @@ function SavedPostsLibrary({
 }
 
 function LibraryPostPreview({
+  language,
   onDelete,
   onFavorite,
   post
 }: {
+  language: Language;
   onDelete: () => void | Promise<void>;
   onFavorite: () => void | Promise<void>;
   post: SavedPost;
@@ -1088,7 +1232,7 @@ function LibraryPostPreview({
               className={clsx("icon-favorite", post.isFavorite && "active")}
               type="button"
               onClick={onFavorite}
-              aria-label={post.isFavorite ? "Remover dos favoritos" : "Favoritar"}
+              aria-label={post.isFavorite ? tx(language, "Remover dos favoritos", "Remove from favorites") : tx(language, "Favoritar", "Add to favorites")}
             >
               <Star size={17} fill={post.isFavorite ? "currentColor" : "none"} />
             </button>
@@ -1096,7 +1240,7 @@ function LibraryPostPreview({
               className="icon-remove"
               type="button"
               onClick={onDelete}
-              aria-label="Remover post"
+              aria-label={tx(language, "Remover post", "Remove post")}
             >
               <Trash2 size={17} />
             </button>
@@ -1107,7 +1251,7 @@ function LibraryPostPreview({
           className="library-media-preview"
           type="button"
           onClick={() => setIsDetailOpen(true)}
-          aria-label="Ver post completo"
+          aria-label={tx(language, "Ver post completo", "View complete post")}
         >
           {previewImage ? (
             <img src={previewImage} alt={post.post.headline_da_imagem} />
@@ -1119,7 +1263,7 @@ function LibraryPostPreview({
           )}
           <span className="view-post-button">
             <Eye size={15} />
-            Ver post
+            {tx(language, "Ver post", "View post")}
           </span>
         </button>
       </div>
@@ -1127,6 +1271,7 @@ function LibraryPostPreview({
       {isDetailOpen && (
         <PostDetailModal
           onClose={() => setIsDetailOpen(false)}
+          language={language}
           option={post.post}
         />
       )}
@@ -1135,9 +1280,11 @@ function LibraryPostPreview({
 }
 
 function PostDetailModal({
+  language,
   onClose,
   option
 }: {
+  language: Language;
   onClose: () => void;
   option: GeneratedPost["post"];
 }) {
@@ -1151,25 +1298,27 @@ function PostDetailModal({
       >
         <div className="schedule-modal-header">
           <div>
-            <p className="eyebrow">Post salvo</p>
-            <h3>Post completo</h3>
+            <p className="eyebrow">{tx(language, "Post salvo", "Saved post")}</p>
+            <h3>{tx(language, "Post completo", "Complete post")}</h3>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar">
+          <button type="button" onClick={onClose} aria-label={tx(language, "Fechar", "Close")}>
             X
           </button>
         </div>
-        <PostCard label="Post completo" option={option} />
+        <PostCard language={language} label={tx(language, "Post completo", "Complete post")} option={option} />
       </div>
     </div>
   );
 }
 
 function SavedPostScheduler({
+  language,
   onPublishNow,
   onSchedule,
   post,
   socialAccounts
 }: {
+  language: Language;
   onPublishNow: (post: SavedPost, socialAccountId: string) => void | Promise<void>;
   onSchedule: (
     post: SavedPost,
@@ -1200,12 +1349,12 @@ function SavedPostScheduler({
     setMessage(null);
 
     if (!nextSocialAccountId) {
-      setMessage("Conecte uma conta do Instagram.");
+      setMessage(tx(language, "Conecte uma conta do Instagram.", "Connect an Instagram account."));
       return;
     }
 
     if (!nextDateTime) {
-      setMessage("Escolha data e horario.");
+      setMessage(tx(language, "Escolha data e horário.", "Choose a date and time."));
       return;
     }
 
@@ -1229,7 +1378,7 @@ function SavedPostScheduler({
     setMessage(null);
 
     if (!socialAccountId) {
-      setMessage("Conecte uma conta do Instagram.");
+      setMessage(tx(language, "Conecte uma conta do Instagram.", "Connect an Instagram account."));
       return;
     }
 
@@ -1251,7 +1400,7 @@ function SavedPostScheduler({
           disabled={isSchedulingPost || isPublishingPost}
         >
           <CalendarClock size={16} />
-          Agendar
+          {tx(language, "Agendar", "Schedule")}
         </button>
         <button
           className="now"
@@ -1260,7 +1409,7 @@ function SavedPostScheduler({
           disabled={isSchedulingPost || isPublishingPost}
         >
           <Send size={16} />
-          {isPublishingPost ? "Publicando" : "Publicar agora"}
+          {isPublishingPost ? tx(language, "Publicando", "Publishing") : tx(language, "Publicar agora", "Publish now")}
         </button>
       </div>
       {message && <span>{message}</span>}
@@ -1268,6 +1417,7 @@ function SavedPostScheduler({
         <ScheduleModal
           accounts={socialAccounts}
           dateTime={dateTime}
+          language={language}
           isSubmitting={isSchedulingPost}
           onClose={() => setIsModalOpen(false)}
           onConfirm={schedule}
@@ -1281,6 +1431,7 @@ function SavedPostScheduler({
 function ScheduleModal({
   accounts,
   dateTime,
+  language,
   isSubmitting = false,
   onClose,
   onConfirm,
@@ -1288,6 +1439,7 @@ function ScheduleModal({
 }: {
   accounts: SocialAccount[];
   dateTime: string;
+  language: Language;
   isSubmitting?: boolean;
   onClose: () => void;
   onConfirm: (socialAccountId: string, dateTime: string) => void | Promise<void>;
@@ -1319,12 +1471,12 @@ function ScheduleModal({
     setLocalError(null);
 
     if (!localAccountId) {
-      setLocalError("Selecione uma conta do Instagram.");
+      setLocalError(tx(language, "Selecione uma conta do Instagram.", "Select an Instagram account."));
       return;
     }
 
     if (!localDateTime) {
-      setLocalError("Escolha data e horario para publicar.");
+      setLocalError(tx(language, "Escolha data e horário para publicar.", "Choose a publishing date and time."));
       return;
     }
 
@@ -1336,7 +1488,7 @@ function ScheduleModal({
       setLocalError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Nao foi possivel confirmar o agendamento."
+          : tx(language, "Não foi possível confirmar o agendamento.", "Could not confirm the scheduled post.")
       );
     } finally {
       setIsLocallySubmitting(false);
@@ -1357,13 +1509,13 @@ function ScheduleModal({
       >
         <div className="schedule-modal-header">
           <div>
-            <p className="eyebrow">Agendamento</p>
-            <h3>Programar post</h3>
+            <p className="eyebrow">{tx(language, "Agendamento", "Scheduling")}</p>
+            <h3>{tx(language, "Programar post", "Schedule post")}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
+            aria-label={tx(language, "Fechar", "Close")}
             disabled={isConfirming}
           >
             X
@@ -1372,7 +1524,7 @@ function ScheduleModal({
 
         <div className="schedule-modal-fields">
           <label>
-            <span>Conta do Instagram</span>
+            <span>{tx(language, "Conta do Instagram", "Instagram account")}</span>
             <select
               value={localAccountId}
               onChange={(event) => setLocalAccountId(event.target.value)}
@@ -1380,8 +1532,8 @@ function ScheduleModal({
             >
               <option value="">
                 {accounts.length === 0
-                  ? "Nenhuma conta conectada"
-                  : "Selecione uma conta"}
+                  ? tx(language, "Nenhuma conta conectada", "No connected account")
+                  : tx(language, "Selecione uma conta", "Select an account")}
               </option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
@@ -1391,7 +1543,7 @@ function ScheduleModal({
             </select>
           </label>
           <label>
-            <span>Data e horario</span>
+            <span>{tx(language, "Data e horário", "Date and time")}</span>
             <input
               type="datetime-local"
               value={localDateTime}
@@ -1410,7 +1562,7 @@ function ScheduleModal({
             onClick={onClose}
             disabled={isConfirming}
           >
-            Cancelar
+            {tx(language, "Cancelar", "Cancel")}
           </button>
           <button
             className="schedule-button"
@@ -1419,7 +1571,9 @@ function ScheduleModal({
             disabled={isConfirming}
           >
             <CalendarClock size={16} />
-            {isConfirming ? "Agendando..." : "Confirmar agendamento"}
+            {isConfirming
+              ? tx(language, "Agendando...", "Scheduling...")
+              : tx(language, "Confirmar agendamento", "Confirm schedule")}
           </button>
         </div>
       </div>
@@ -1452,11 +1606,13 @@ function DashboardSection({
 function SocialAccountsPanel({
   accounts,
   error,
+  language,
   onConnect,
   onDisconnect
 }: {
   accounts: SocialAccount[];
   error: string | null;
+  language: Language;
   onConnect: () => void | Promise<void>;
   onDisconnect: (id: string) => void | Promise<void>;
 }) {
@@ -1464,15 +1620,18 @@ function SocialAccountsPanel({
     <div className="social-panel">
       <div className="integration-header">
         <div>
-          <h3>Instagram profissional</h3>
+          <h3>{tx(language, "Contas do Instagram", "Instagram accounts")}</h3>
           <p>
-            Conecte uma conta Business ou Creator para publicar automaticamente,
-            sem depender de Pagina do Facebook.
+            {tx(
+              language,
+              "Conecte uma conta Business ou Creator do Instagram para publicar ou agendar publicações automaticamente.",
+              "Connect an Instagram Business or Creator account to publish or schedule posts automatically."
+            )}
           </p>
         </div>
         <button className="primary-button" type="button" onClick={onConnect}>
           <Plug size={18} />
-          Conectar Instagram
+          {tx(language, "Conectar Instagram", "Connect Instagram")}
         </button>
       </div>
 
@@ -1483,8 +1642,8 @@ function SocialAccountsPanel({
           <div className="empty-icon">
             <Plug size={30} />
           </div>
-          <h3>Nenhuma conta conectada.</h3>
-          <p>Depois de conectar, voce podera agendar posts direto do dashboard.</p>
+          <h3>{tx(language, "Nenhuma conta conectada.", "No connected account.")}</h3>
+          <p>{tx(language, "Depois de conectar, você poderá agendar posts direto do dashboard.", "After connecting, you can schedule posts directly from the dashboard.")}</p>
         </div>
       ) : (
         <div className="account-list">
@@ -1500,12 +1659,12 @@ function SocialAccountsPanel({
                 <span>
                   {account.auth_flow === "instagram_login"
                     ? "Instagram Login"
-                    : account.page_name || "Conta conectada"}
+                    : account.page_name || tx(language, "Conta conectada", "Connected account")}
                 </span>
               </div>
               <span className="status-pill">{account.status}</span>
               <button type="button" onClick={() => onDisconnect(account.id)}>
-                Desconectar
+                {tx(language, "Desconectar", "Disconnect")}
               </button>
             </div>
           ))}
@@ -1517,10 +1676,12 @@ function SocialAccountsPanel({
 
 function ScheduledPostsPanel({
   accounts,
+  language,
   onCancel,
   posts
 }: {
   accounts: SocialAccount[];
+  language: Language;
   onCancel: (id: string) => void | Promise<void>;
   posts: ScheduledPost[];
 }) {
@@ -1555,15 +1716,15 @@ function ScheduledPostsPanel({
         <div className="empty-icon">
           <CalendarClock size={30} />
         </div>
-        <h3>Nenhuma conta conectada.</h3>
-        <p>Conecte uma conta do Instagram para organizar seus agendamentos.</p>
+        <h3>{tx(language, "Nenhuma conta conectada.", "No connected account.")}</h3>
+        <p>{tx(language, "Conecte uma conta do Instagram para organizar seus agendamentos.", "Connect an Instagram account to manage your schedule.")}</p>
       </div>
     );
   }
 
   return (
     <div className="schedule-panel">
-      <div className="account-tabs" aria-label="Contas do Instagram">
+      <div className="account-tabs" aria-label={tx(language, "Contas do Instagram", "Instagram accounts")}>
         {accountTabs.map((account) => (
           <button
             className={clsx(selectedAccountId === account.id && "active")}
@@ -1577,13 +1738,13 @@ function ScheduledPostsPanel({
         ))}
       </div>
 
-      <div className="schedule-status-tabs" aria-label="Status dos posts">
+      <div className="schedule-status-tabs" aria-label={tx(language, "Status dos posts", "Post status")}>
         <button
           className={clsx(activeStatusTab === "agendados" && "active")}
           type="button"
           onClick={() => setActiveStatusTab("agendados")}
         >
-          Agendados
+          {tx(language, "Agendados", "Scheduled")}
           <span>{scheduledCount}</span>
         </button>
         <button
@@ -1591,7 +1752,7 @@ function ScheduledPostsPanel({
           type="button"
           onClick={() => setActiveStatusTab("publicados")}
         >
-          Publicados
+          {tx(language, "Publicados", "Published")}
           <span>{publishedCount}</span>
         </button>
       </div>
@@ -1603,15 +1764,20 @@ function ScheduledPostsPanel({
           </div>
           <h3>
             {activeStatusTab === "agendados"
-              ? "Nenhum post agendado nesta conta."
-              : "Nenhum post publicado nesta conta."}
+              ? tx(language, "Nenhum post agendado nesta conta.", "No scheduled posts for this account.")
+              : tx(language, "Nenhum post publicado nesta conta.", "No published posts for this account.")}
           </h3>
-          <p>Os posts desta conta aparecem aqui conforme o status.</p>
+          <p>{tx(language, "Os posts desta conta aparecem aqui conforme o status.", "Posts for this account appear here based on their status.")}</p>
         </div>
       ) : (
         <div className="schedule-list">
           {visiblePosts.map((post) => (
-            <ScheduledPostCard key={post.id} post={post} onCancel={onCancel} />
+            <ScheduledPostCard
+              key={post.id}
+              language={language}
+              post={post}
+              onCancel={onCancel}
+            />
           ))}
         </div>
       )}
@@ -1620,9 +1786,11 @@ function ScheduledPostsPanel({
 }
 
 function ScheduledPostCard({
+  language,
   onCancel,
   post
 }: {
+  language: Language;
   onCancel: (id: string) => void | Promise<void>;
   post: ScheduledPost;
 }) {
@@ -1637,10 +1805,10 @@ function ScheduledPostCard({
             <p className="eyebrow">
               @{post.instagram_username || post.page_name || "instagram"}
             </p>
-            <h3>{formatDateTime(post.scheduled_for)}</h3>
+            <h3>{formatDateTime(post.scheduled_for, language)}</h3>
           </div>
           <span className={clsx("status-pill", post.status)}>
-            {getScheduleStatusLabel(post.status)}
+            {getScheduleStatusLabel(post.status, language)}
           </span>
         </div>
 
@@ -1648,12 +1816,12 @@ function ScheduledPostCard({
           className="library-media-preview"
           type="button"
           onClick={() => setIsDetailOpen(true)}
-          aria-label="Ver post agendado"
+          aria-label={tx(language, "Ver post agendado", "View scheduled post")}
         >
           {previewImage ? (
-            <img src={previewImage} alt="Midia do post agendado" />
+            <img src={previewImage} alt={tx(language, "Mídia do post agendado", "Scheduled post media")} />
           ) : (
-            <span>Post agendado</span>
+            <span>{tx(language, "Post agendado", "Scheduled post")}</span>
           )}
           {post.media_urls.length > 1 && (
             <span className="library-carousel-count">
@@ -1662,7 +1830,7 @@ function ScheduledPostCard({
           )}
           <span className="view-post-button">
             <Eye size={15} />
-            Ver post
+            {tx(language, "Ver post", "View post")}
           </span>
         </button>
 
@@ -1670,7 +1838,7 @@ function ScheduledPostCard({
           {post.error_message && <span>{post.error_message}</span>}
           {post.status === "pending" && (
             <button type="button" onClick={() => onCancel(post.id)}>
-              Cancelar
+              {tx(language, "Cancelar", "Cancel")}
             </button>
           )}
         </div>
@@ -1679,6 +1847,7 @@ function ScheduledPostCard({
       {isDetailOpen && (
         <ScheduledPostDetailModal
           onClose={() => setIsDetailOpen(false)}
+          language={language}
           post={post}
         />
       )}
@@ -1687,9 +1856,11 @@ function ScheduledPostCard({
 }
 
 function ScheduledPostDetailModal({
+  language,
   onClose,
   post
 }: {
+  language: Language;
   onClose: () => void;
   post: ScheduledPost;
 }) {
@@ -1706,9 +1877,9 @@ function ScheduledPostDetailModal({
             <p className="eyebrow">
               @{post.instagram_username || post.page_name || "instagram"}
             </p>
-            <h3>{formatDateTime(post.scheduled_for)}</h3>
+            <h3>{formatDateTime(post.scheduled_for, language)}</h3>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar">
+          <button type="button" onClick={onClose} aria-label={tx(language, "Fechar", "Close")}>
             X
           </button>
         </div>
@@ -1719,12 +1890,12 @@ function ScheduledPostDetailModal({
               <img
                 key={`${post.id}-${index}`}
                 src={image}
-                alt={`Midia ${index + 1} do post agendado`}
+                alt={tx(language, `Mídia ${index + 1} do post agendado`, `Scheduled post media ${index + 1}`)}
               />
             ))}
           </div>
           <div className="card-section">
-            <h3>Descricao</h3>
+            <h3>{tx(language, "Descrição", "Caption")}</h3>
             <p className="caption-text">{post.caption}</p>
           </div>
         </div>
@@ -1738,6 +1909,7 @@ function buildScheduleAccountTabs(
   posts: ScheduledPost[]
 ) {
   const accountMap = new Map<string, { count: number; id: string; label: string }>();
+  const visiblePosts = getVisibleScheduledPosts(posts);
 
   accounts.forEach((account) => {
     accountMap.set(account.id, {
@@ -1747,7 +1919,7 @@ function buildScheduleAccountTabs(
     });
   });
 
-  posts.forEach((post) => {
+  visiblePosts.forEach((post) => {
     const current = accountMap.get(post.social_account_id);
 
     if (current) {
@@ -1765,32 +1937,45 @@ function buildScheduleAccountTabs(
   return Array.from(accountMap.values());
 }
 
+function getVisibleScheduledPosts(posts: ScheduledPost[]) {
+  return posts.filter((post) =>
+    post.status === "pending" ||
+    post.status === "publishing" ||
+    post.status === "published"
+  );
+}
+
 function UsagePanel({
   creditLimit,
+  language,
   remainingCredits,
   savedPosts,
   usedCredits,
   usagePercent
 }: {
   creditLimit: number;
+  language: Language;
   remainingCredits: number;
   savedPosts: SavedPost[];
   usedCredits: number;
   usagePercent: number;
 }) {
   return (
-    <DashboardSection eyebrow="Uso" title="Creditos e consumo">
+    <DashboardSection
+      eyebrow={tx(language, "Uso", "Usage")}
+      title={tx(language, "Créditos e consumo", "Credits and usage")}
+    >
       <div className="metrics-grid">
         <div className="metric-card">
-          <span>Creditos totais</span>
+          <span>{tx(language, "Créditos totais", "Total credits")}</span>
           <strong>{creditLimit}</strong>
         </div>
         <div className="metric-card">
-          <span>Usados</span>
+          <span>{tx(language, "Usados", "Used")}</span>
           <strong>{usedCredits}</strong>
         </div>
         <div className="metric-card">
-          <span>Restantes</span>
+          <span>{tx(language, "Restantes", "Remaining")}</span>
           <strong>{remainingCredits}</strong>
         </div>
       </div>
@@ -1798,8 +1983,8 @@ function UsagePanel({
       <div className="usage-panel">
         <div className="usage-panel-header">
           <div>
-            <p className="eyebrow">Progresso mensal</p>
-            <h3>{usagePercent}% dos creditos usados</h3>
+            <p className="eyebrow">{tx(language, "Progresso mensal", "Monthly progress")}</p>
+            <h3>{tx(language, `${usagePercent}% dos créditos usados`, `${usagePercent}% of credits used`)}</h3>
           </div>
           <strong>
             {usedCredits}/{creditLimit}
@@ -1808,14 +1993,14 @@ function UsagePanel({
         <div className="usage-bar large">
           <span style={{ width: `${usagePercent}%` }} />
         </div>
-        <p>O consumo e registrado no servidor a cada geracao concluida.</p>
+        <p>{tx(language, "O consumo é registrado no servidor a cada geração concluída.", "Usage is recorded on the server after each completed generation.")}</p>
       </div>
 
       <div className="usage-panel">
         <div className="usage-panel-header">
           <div>
-            <p className="eyebrow">Atividade</p>
-            <h3>{savedPosts.length} posts salvos</h3>
+            <p className="eyebrow">{tx(language, "Atividade", "Activity")}</p>
+            <h3>{tx(language, `${savedPosts.length} posts salvos`, `${savedPosts.length} saved posts`)}</h3>
           </div>
         </div>
       </div>
@@ -1823,51 +2008,57 @@ function UsagePanel({
   );
 }
 
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
+function formatDateTime(value: string, language: Language = "pt") {
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
 }
 
-function getScheduleStatusLabel(status: ScheduledPost["status"]) {
+function getScheduleStatusLabel(status: ScheduledPost["status"], language: Language = "pt") {
   const labels = {
-    canceled: "Cancelado",
-    failed: "Falhou",
-    pending: "Agendado",
-    published: "Publicado",
-    publishing: "Publicando"
+    canceled: tx(language, "Cancelado", "Canceled"),
+    failed: tx(language, "Falhou", "Failed"),
+    pending: tx(language, "Agendado", "Scheduled"),
+    published: tx(language, "Publicado", "Published"),
+    publishing: tx(language, "Publicando", "Publishing")
   };
 
   return labels[status];
 }
 
 function ProfilePanel({
+  language,
   planName,
   profile
 }: {
+  language: Language;
   planName: string;
   profile: DashboardProfile;
 }) {
   return (
-    <DashboardSection eyebrow="Perfil" title="Dados da conta">
+    <DashboardSection
+      eyebrow={tx(language, "Perfil", "Profile")}
+      title={tx(language, "Dados da conta", "Account details")}
+    >
       <div className="profile-grid">
         <div className="profile-card">
           <div className="profile-avatar large">{getInitials(profile.name)}</div>
           <h3>{profile.name}</h3>
           <p>{profile.email}</p>
-          <span>Plano {planName}</span>
+          <span>{tx(language, `Plano ${planName}`, `${planName} plan`)}</span>
         </div>
         <div className="profile-details">
           <EmailConfirmationNotice
             email={profile.email}
+            language={language}
             isConfirmed={profile.emailConfirmed}
           />
-          <InfoRow label="Nome" value={profile.name} />
+          <InfoRow label={tx(language, "Nome", "Name")} value={profile.name} />
           <InfoRow label="Email" value={profile.email} />
-          <InfoRow label="CPF/CNPJ" value={profile.document || "Nao informado"} />
-          <InfoRow label="Celular" value={profile.phone || "Nao informado"} />
-          <InfoRow label="Plano" value={planName} />
+          <InfoRow label="CPF/CNPJ" value={profile.document || tx(language, "Não informado", "Not provided")} />
+          <InfoRow label={tx(language, "Celular", "Phone")} value={profile.phone || tx(language, "Não informado", "Not provided")} />
+          <InfoRow label={tx(language, "Plano", "Plan")} value={planName} />
         </div>
       </div>
     </DashboardSection>
@@ -1876,9 +2067,11 @@ function ProfilePanel({
 
 function EmailConfirmationNotice({
   email,
+  language,
   isConfirmed
 }: {
   email: string;
+  language: Language;
   isConfirmed: boolean;
 }) {
   const [message, setMessage] = useState<string | null>(null);
@@ -1906,9 +2099,9 @@ function EmailConfirmationNotice({
         throw error;
       }
 
-      setMessage("Email de confirmacao reenviado.");
+      setMessage(tx(language, "Email de confirmação reenviado.", "Confirmation email sent again."));
     } catch {
-      setMessage("Nao foi possivel reenviar agora.");
+      setMessage(tx(language, "Não foi possível reenviar agora.", "Could not resend it right now."));
     } finally {
       setIsSending(false);
     }
@@ -1919,8 +2112,8 @@ function EmailConfirmationNotice({
       <div className="email-notice confirmed">
         <ShieldCheck size={18} />
         <div>
-          <strong>Email confirmado</strong>
-          <p>Sua conta esta com email verificado.</p>
+          <strong>{tx(language, "Email confirmado", "Email confirmed")}</strong>
+          <p>{tx(language, "Sua conta está com email verificado.", "Your account email is verified.")}</p>
         </div>
       </div>
     );
@@ -1930,10 +2123,12 @@ function EmailConfirmationNotice({
     <div className="email-notice pending">
       <ShieldCheck size={18} />
       <div>
-        <strong>Email ainda nao confirmado</strong>
-        <p>Confirme seu email para aumentar a seguranca da conta.</p>
+        <strong>{tx(language, "Email ainda não confirmado", "Email not confirmed yet")}</strong>
+        <p>{tx(language, "Confirme seu email para aumentar a segurança da conta.", "Confirm your email to improve account security.")}</p>
         <button type="button" onClick={resendConfirmation} disabled={isSending}>
-          {isSending ? "Enviando..." : "Reenviar confirmacao"}
+          {isSending
+            ? tx(language, "Enviando...", "Sending...")
+            : tx(language, "Reenviar confirmação", "Resend confirmation")}
         </button>
         {message && <span>{message}</span>}
       </div>
@@ -1950,20 +2145,20 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LoadingPostState() {
+function LoadingPostState({ language }: { language: Language }) {
   return (
     <div className="loading-state" role="status" aria-live="polite">
       <div className="loader-orbit">
         <span />
         <Sparkles size={30} />
       </div>
-      <h3>Criando seu post completo</h3>
-      <p>Gerando copy, imagem, descricao e hashtags em um unico fluxo.</p>
+      <h3>{tx(language, "Criando seu post completo", "Creating your complete post")}</h3>
+      <p>{tx(language, "Gerando copy, imagem, descrição e hashtags em um único fluxo.", "Generating copy, image, caption, and hashtags in one flow.")}</p>
       <div className="loading-steps">
-        <span>Briefing</span>
+        <span>{tx(language, "Briefing", "Brief")}</span>
         <span>Copy</span>
-        <span>Imagem</span>
-        <span>Finalizacao</span>
+        <span>{tx(language, "Imagem", "Image")}</span>
+        <span>{tx(language, "Finalização", "Finishing")}</span>
       </div>
     </div>
   );
@@ -2000,6 +2195,7 @@ function PostCard({
   hideBuiltInActions = false,
   hideActions = false,
   label,
+  language = "pt",
   onChange,
   option
 }: {
@@ -2009,6 +2205,7 @@ function PostCard({
   hideBuiltInActions?: boolean;
   hideActions?: boolean;
   label: string;
+  language?: Language;
   onChange?: (option: GeneratedPost["post"]) => void;
   option: GeneratedPost["post"];
 }) {
@@ -2067,18 +2264,18 @@ function PostCard({
             {extraActions}
             {!hideBuiltInActions && (
               <>
-                <button type="button" onClick={copyCaption} aria-label="Copiar descricao">
+                <button type="button" onClick={copyCaption} aria-label={tx(language, "Copiar descrição", "Copy caption")}>
                   <Copy size={17} />
-                  {copied ? "Copiado" : "Copiar"}
+                  {copied ? tx(language, "Copiado", "Copied") : tx(language, "Copiar", "Copy")}
                 </button>
                 <button
                   type="button"
                   onClick={downloadImages}
-                  aria-label="Baixar imagem"
+                  aria-label={tx(language, "Baixar imagem", "Download image")}
                   disabled={images.length === 0}
                 >
                   <Download size={17} />
-                  Baixar
+                  {tx(language, "Baixar", "Download")}
                 </button>
               </>
             )}
@@ -2092,7 +2289,7 @@ function PostCard({
             <figure className="carousel-stage">
               <img
                 src={images[activeSlide]}
-                alt={`${option.headline_da_imagem} - imagem ${activeSlide + 1}`}
+                alt={tx(language, `${option.headline_da_imagem} - imagem ${activeSlide + 1}`, `${option.headline_da_imagem} - image ${activeSlide + 1}`)}
               />
               <figcaption>
                 {activeSlide + 1} / {images.length}
@@ -2103,25 +2300,25 @@ function PostCard({
               <button
                 type="button"
                 onClick={goToPreviousSlide}
-                aria-label="Imagem anterior"
+                aria-label={tx(language, "Imagem anterior", "Previous image")}
               >
                 <ChevronLeft size={19} />
               </button>
-              <div className="carousel-dots" aria-label="Slides do carrossel">
+              <div className="carousel-dots" aria-label={tx(language, "Slides do carrossel", "Carousel slides")}>
                 {images.map((image, index) => (
                   <button
                     className={clsx(activeSlide === index && "active")}
                     type="button"
                     key={`${index}-${image.length}`}
                     onClick={() => setActiveSlide(index)}
-                    aria-label={`Ver imagem ${index + 1}`}
+                    aria-label={tx(language, `Ver imagem ${index + 1}`, `View image ${index + 1}`)}
                   />
                 ))}
               </div>
               <button
                 type="button"
                 onClick={goToNextSlide}
-                aria-label="Proxima imagem"
+                aria-label={tx(language, "Próxima imagem", "Next image")}
               >
                 <ChevronRight size={19} />
               </button>
@@ -2139,11 +2336,11 @@ function PostCard({
       </div>
 
       <div className="card-section">
-        <h3>Descricao</h3>
+        <h3>{tx(language, "Descrição", "Caption")}</h3>
         {editable ? (
           <textarea
             className="caption-editor"
-            aria-label="Editar descricao"
+            aria-label={tx(language, "Editar descrição", "Edit caption")}
             rows={8}
             value={option.caption}
             onChange={(event) => updateCaption(event.target.value)}
@@ -2157,7 +2354,7 @@ function PostCard({
         <label className="hashtags-editor">
           <span>Hashtags</span>
           <textarea
-            aria-label="Editar hashtags"
+            aria-label={tx(language, "Editar hashtags", "Edit hashtags")}
             rows={3}
             value={option.hashtags
               .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`))

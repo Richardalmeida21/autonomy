@@ -1,45 +1,121 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState, FormEvent } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { ChevronRight, Check, Plus, Minus, Sparkles, TrendingUp, Cpu } from "lucide-react";
 import { plans } from "@/lib/plans";
 import logoImg from "@/images/logo_autonomy.png";
 
+type Language = "pt" | "en";
+
+function tx(language: Language, pt: string, en: string) {
+  return language === "en" ? en : pt;
+}
+
+function translatePlanText(value: string, language: Language) {
+  if (language !== "en") {
+    return value;
+  }
+
+  return value
+    .replace(/créditos/gi, "credits")
+    .replace(/credito/gi, "credit")
+    .replace(/contas do Instagram/gi, "Instagram accounts")
+    .replace(/conta do Instagram/gi, "Instagram account")
+    .replace(/posts completos/gi, "complete posts")
+    .replace(/imagens/gi, "images")
+    .replace(/agendamento/gi, "scheduling")
+    .replace(/suporte/gi, "support")
+    .replace(/prioritário/gi, "priority")
+    .replace(/por mês/gi, "per month")
+    .replace(/mês/gi, "month")
+    .replace(/Até/gi, "Up to")
+    .replace(/até/gi, "up to");
+}
+
 export default function LandingPage() {
   const router = useRouter();
+  const [language, setLanguage] = useState<Language>("pt");
   const [email, setEmail] = useState("");
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
-  const faqs = [
-    {
-      question: "Como funciona a criação de posts com IA?",
-      answer: "Você fornece um briefing rápido ou tema da sua área de atuação. Nossa inteligência artificial cria imagens atraentes de nível profissional, redige a legenda de vendas focada em conversão e seleciona as hashtags mais relevantes para o seu nicho."
-    },
-    {
-      question: "Posso cancelar minha assinatura a qualquer momento?",
-      answer: "Com certeza. Não há contratos de fidelidade ou termos de permanência mínima. Você pode gerenciar ou cancelar sua assinatura diretamente no painel do usuário com um único clique."
-    },
-    {
-      question: "Quantas contas do Instagram posso gerenciar?",
-      answer: "O limite depende do plano escolhido: o plano Starter dá suporte a 1 conta, o Pro gerencia até 3 contas, e o plano Agency permite conectar e automatizar até 10 contas simultaneamente."
-    },
-    {
-      question: "Os criativos e textos gerados são exclusivos?",
-      answer: "Sim. Cada imagem, copy e conjunto de hashtags são gerados sob demanda com base no seu nicho e briefing específico, garantindo conteúdos 100% originais para a sua marca."
-    },
-    {
-      question: "Preciso de conhecimentos de design para usar?",
-      answer: "Nenhum. O Autonomy foi feito justamente para que você não precise gastar horas no Canva ou contratar agências. Nossa IA cuida de toda a complexidade técnica de design e copy."
-    }
-  ];
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nextLanguage =
+      params.get("lang") === "en" ||
+      window.localStorage.getItem("autonomy.language") === "en"
+        ? "en"
+        : "pt";
+    setLanguage(nextLanguage);
+    window.localStorage.setItem("autonomy.language", nextLanguage);
+  }, []);
+
+  const localizedFaqs =
+    language === "en"
+      ? [
+          {
+            question: "How does AI post creation work?",
+            answer:
+              "You provide a short brief or topic for your business. Autonomy creates professional visuals, writes the caption, and suggests relevant hashtags for your niche."
+          },
+          {
+            question: "Can I cancel my subscription at any time?",
+            answer:
+              "Yes. There is no long-term contract. You can manage or cancel your subscription from the dashboard."
+          },
+          {
+            question: "How many Instagram accounts can I manage?",
+            answer:
+              "It depends on the plan: Starter supports 1 account, Pro supports up to 3 accounts, and Agency supports up to 10 accounts."
+          },
+          {
+            question: "Are the generated creatives and captions unique?",
+            answer:
+              "Yes. Each image, caption, and hashtag set is generated on demand from your brief."
+          },
+          {
+            question: "Do I need design experience?",
+            answer:
+              "No. Autonomy is designed to create professional posts without complex design tools."
+          }
+        ]
+      : [
+          {
+            question: "Como funciona a criação de posts com IA?",
+            answer:
+              "Você fornece um briefing rápido ou tema da sua área de atuação. O Autonomy cria imagens profissionais, escreve a legenda e sugere hashtags relevantes para o seu nicho."
+          },
+          {
+            question: "Posso cancelar minha assinatura a qualquer momento?",
+            answer:
+              "Sim. Não há contrato de fidelidade. Você pode gerenciar ou cancelar sua assinatura pelo painel."
+          },
+          {
+            question: "Quantas contas do Instagram posso gerenciar?",
+            answer:
+              "O limite depende do plano escolhido: Starter suporta 1 conta, Pro até 3 contas e Agency até 10 contas."
+          },
+          {
+            question: "Os criativos e textos gerados são exclusivos?",
+            answer:
+              "Sim. Cada imagem, legenda e conjunto de hashtags são gerados sob demanda com base no seu briefing."
+          },
+          {
+            question: "Preciso de conhecimentos de design para usar?",
+            answer:
+              "Não. O Autonomy foi feito para criar posts profissionais sem depender de ferramentas complexas."
+          }
+        ];
 
   function handleStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email) return;
-    router.push(`/cadastro?email=${encodeURIComponent(email)}`);
+    window.localStorage.setItem("autonomy.language", language);
+    router.push(
+      `/cadastro?email=${encodeURIComponent(email)}${language === "en" ? "&lang=en" : ""}`
+    );
   }
 
   function toggleFaq(index: number) {
@@ -60,8 +136,21 @@ export default function LandingPage() {
           />
         </Link>
         <div className="nav-actions">
-          <Link className="nav-signin-btn" href="/login">Entrar</Link>
-          <Link className="nav-signup-btn" href="/cadastro">Começar agora</Link>
+          <button
+            className="nav-language-btn"
+            type="button"
+            onClick={() => {
+              const nextLanguage = language === "en" ? "pt" : "en";
+              setLanguage(nextLanguage);
+              window.localStorage.setItem("autonomy.language", nextLanguage);
+            }}
+          >
+            {language === "en" ? "Português" : "English"}
+          </button>
+          <Link className="nav-signin-btn" href={language === "en" ? "/login?lang=en" : "/login"}>
+            {tx(language, "Entrar", "Sign in")}
+          </Link>
+          <Link className="nav-signup-btn" href={language === "en" ? "/cadastro?lang=en" : "/cadastro"}>{tx(language, "Começar agora", "Start now")}</Link>
         </div>
       </nav>
 
@@ -70,43 +159,55 @@ export default function LandingPage() {
         <div className="hero-content">
           <span className="hero-badge">
             <Sparkles size={14} className="badge-icon" />
-            Nova Inteligência Artificial de Imagem Integrada
+            {tx(language, "Nova inteligência artificial de imagem integrada", "Integrated AI image generation")}
           </span>
-          <h1>Seu feed do Instagram criado por IA. Enquanto você foca no seu negócio.</h1>
-          <h2>Crie, agende e poste conteúdos profissionais em segundos. Cancele quando quiser.</h2>
+          <h1>
+            {tx(
+              language,
+              "Seu feed do Instagram criado por IA. Enquanto você foca no seu negócio.",
+              "Your Instagram feed, created by AI while you focus on your business."
+            )}
+          </h1>
+          <h2>
+            {tx(
+              language,
+              "Crie, agende e publique conteúdos profissionais em segundos. Cancele quando quiser.",
+              "Create, schedule, and publish professional Instagram content in seconds. Cancel anytime."
+            )}
+          </h2>
           
           <form className="hero-cta-form" onSubmit={handleStart}>
             <div className="cta-form-group">
               <input 
                 type="email" 
-                placeholder="Insira seu endereço de e-mail" 
+                placeholder={tx(language, "Insira seu endereço de email", "Enter your email address")}
                 required 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
               <button type="submit">
-                Começar Agora
+                {tx(language, "Começar agora", "Start now")}
                 <ChevronRight size={20} />
               </button>
             </div>
-            <p className="cta-disclaimer">Experimente hoje mesmo. Sem compromisso de fidelidade.</p>
+            <p className="cta-disclaimer">{tx(language, "Experimente hoje mesmo. Sem compromisso de fidelidade.", "Try it today. No long-term commitment.")}</p>
           </form>
         </div>
 
         {/* Visual Principal: Dashboard SaaS Mockup com Badges Flutuantes */}
         <div className="dashboard-preview-container">
-          {/* Badges Flutuantes de Alta Conversão */}
+          {/* Badges flutuantes de alta conversao */}
           <div className="floating-badge fb-1">
             <TrendingUp size={14} className="fb-icon" />
-            <span>+214% Alcance Orgânico</span>
+            <span>{tx(language, "+214% Alcance Orgânico", "+214% organic reach")}</span>
           </div>
           <div className="floating-badge fb-2">
             <Cpu size={14} className="fb-icon" />
-            <span>IA Autônoma Ativa</span>
+            <span>{tx(language, "IA autônoma ativa", "Autonomous AI active")}</span>
           </div>
           <div className="floating-badge fb-3">
             <Sparkles size={14} className="fb-icon" />
-            <span>Post Pronto em 4s</span>
+            <span>{tx(language, "Post pronto em 4s", "Post ready in 4s")}</span>
           </div>
 
           <div className="dashboard-preview-mockup">
@@ -117,7 +218,7 @@ export default function LandingPage() {
                 <span className="dot dot-green"></span>
               </div>
               <div className="window-tab-active">
-                <span>Autonomy AI - Painel de Controle</span>
+                <span>{tx(language, "Autonomy AI - Painel de controle", "Autonomy AI - Dashboard")}</span>
               </div>
             </div>
             
@@ -125,32 +226,32 @@ export default function LandingPage() {
               {/* Sidebar do Mockup */}
               <div className="mockup-sidebar">
                 <div className="sidebar-group">
-                  <label className="mockup-label">Nicho de atuação</label>
-                  <div className="mockup-input">Clínica de Estética</div>
+                  <label className="mockup-label">{tx(language, "Nicho de atuação", "Business niche")}</label>
+                  <div className="mockup-input">{tx(language, "Clínica de estética", "Aesthetic clinic")}</div>
                 </div>
                 <div className="sidebar-group">
-                  <label className="mockup-label">Tema do post</label>
-                  <div className="mockup-input">Tratamentos faciais naturais</div>
+                  <label className="mockup-label">{tx(language, "Tema do post", "Post topic")}</label>
+                  <div className="mockup-input">{tx(language, "Tratamentos faciais naturais", "Natural facial treatments")}</div>
                 </div>
                 <div className="sidebar-group">
-                  <label className="mockup-label">Formato do post</label>
-                  <div className="mockup-input-select">Imagem única</div>
+                  <label className="mockup-label">{tx(language, "Formato do post", "Post format")}</label>
+                  <div className="mockup-input-select">{tx(language, "Imagem única", "Single image")}</div>
                 </div>
                 <button className="mockup-generate-btn" type="button" disabled>
-                  Gerar Post ⚡
+                  {tx(language, "Gerar post", "Generate post")}
                 </button>
               </div>
               
               {/* Output do Mockup */}
               <div className="mockup-output-area">
                 <div className="mockup-output-header">
-                  <span>Visualização de Saída</span>
-                  <span className="mockup-status-badge">Pronto</span>
+                  <span>{tx(language, "Visualização de saída", "Output preview")}</span>
+                  <span className="mockup-status-badge">{tx(language, "Pronto", "Ready")}</span>
                 </div>
                 <div className="mockup-post-card">
                   <div className="post-visual-box">
                     <div className="visual-graphic">
-                      <span>Pele Natural & Iluminada</span>
+                      <span>{tx(language, "Pele natural e iluminada", "Natural glowing skin")}</span>
                     </div>
                   </div>
                   <div className="post-copy-box">
@@ -160,8 +261,14 @@ export default function LandingPage() {
                       </div>
                       <strong className="post-card-username">clinica_renova</strong>
                     </div>
-                    <strong>Legenda Sugerida</strong>
-                    <p>O segredo de um cuidado facial com excelentes resultados é manter a harmonia natural da sua pele... ✨</p>
+                    <strong>{tx(language, "Legenda sugerida", "Suggested caption")}</strong>
+                    <p>
+                      {tx(
+                        language,
+                        "O segredo de um cuidado facial com excelentes resultados é manter a harmonia natural da sua pele.",
+                        "The secret to great facial care is keeping your skin's natural harmony."
+                      )}
+                    </p>
                     <span className="post-tags">#estetica #pelelinda #bemestar</span>
                   </div>
                 </div>
@@ -172,7 +279,9 @@ export default function LandingPage() {
 
         {/* Prova Social: Logo Cloud */}
         <div className="logo-cloud-section">
-          <p className="logo-cloud-title">UTILIZADO POR MAIS DE 5.000 CREATORS E MARCAS DE SUCESSO</p>
+          <p className="logo-cloud-title">
+            {tx(language, "UTILIZADO POR MAIS DE 5.000 CREATORS E MARCAS DE SUCESSO", "USED BY MORE THAN 5,000 CREATORS AND GROWING BRANDS")}
+          </p>
           <div className="logo-grid">
             <span className="logo-item">APEX INC</span>
             <span className="logo-item">VERTEX</span>
@@ -183,16 +292,20 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Seção 2: Funcionalidades Estilo Clean Tech */}
+      {/* Secao 2: funcionalidades */}
       <section className="features-section">
         
         {/* Bloco 1 */}
         <div className="feature-row">
           <div className="feature-text">
-            <span className="feature-badge">Geração de Imagem</span>
-            <h2>Criação inteligente de imagens de alto impacto.</h2>
+            <span className="feature-badge">{tx(language, "Geração de imagem", "Image generation")}</span>
+            <h2>{tx(language, "Criação inteligente de imagens de alto impacto.", "Smart creation of high-impact visuals.")}</h2>
             <p>
-              Nossa inteligência artificial cria imagens altamente profissionais e atraentes adaptadas para o seu nicho. Diga adeus ao Canva e contratações caras.
+              {tx(
+                language,
+                "Nossa inteligência artificial cria imagens profissionais adaptadas para o seu nicho, sem depender de ferramentas complexas.",
+                "Our AI creates professional visuals tailored to your niche, without relying on complex design tools."
+              )}
             </p>
           </div>
           <div className="feature-visual">
@@ -203,22 +316,22 @@ export default function LandingPage() {
                     <div className="phone-avatar"></div>
                   </div>
                   <div className="phone-user-info">
-                    <span className="phone-username">seu_perfil</span>
-                    <span className="phone-location">Patrocinado</span>
+                    <span className="phone-username">{tx(language, "seu_perfil", "your_profile")}</span>
+                    <span className="phone-location">{tx(language, "Patrocinado", "Sponsored")}</span>
                   </div>
                 </div>
                 <div className="phone-content-image">
                   <div className="phone-content-overlay">
-                    <span>Design Automático IA 🚀</span>
+                    <span>{tx(language, "Design automático com IA", "Automatic AI design")}</span>
                   </div>
                 </div>
                 <div className="phone-actions-bar">
-                  <span className="action-icon">❤️</span>
-                  <span className="action-icon">💬</span>
-                  <span className="action-icon">✈️</span>
+                  <span className="action-icon">Like</span>
+                  <span className="action-icon">Comment</span>
+                  <span className="action-icon">Share</span>
                 </div>
                 <div className="phone-caption">
-                  <strong>seu_perfil</strong> Design premium criado em segundos pela IA! Escalar sua marca ficou incrivelmente simples.
+                  <strong>{tx(language, "seu_perfil", "your_profile")}</strong> {tx(language, "Design premium criado em segundos pela IA.", "Premium design created by AI in seconds.")}
                 </div>
               </div>
             </div>
@@ -230,21 +343,21 @@ export default function LandingPage() {
           <div className="feature-visual">
             <div className="calendar-mockup">
               <div className="calendar-header">
-                <span>Calendário Editorial</span>
-                <span className="calendar-month">Junho 2026</span>
+                <span>{tx(language, "Calendário editorial", "Editorial calendar")}</span>
+                <span className="calendar-month">{tx(language, "Junho 2026", "June 2026")}</span>
               </div>
               <div className="calendar-grid">
                 <div className="calendar-day">
                   <span className="day-number">15</span>
                   <div className="calendar-event published">
-                    <span>Post Carrossel</span>
+                    <span>{tx(language, "Post carrossel", "Carousel post")}</span>
                     <span className="time">12:00</span>
                   </div>
                 </div>
                 <div className="calendar-day">
                   <span className="day-number">16</span>
                   <div className="calendar-event scheduled">
-                    <span>Imagem única</span>
+                    <span>{tx(language, "Imagem única", "Single image")}</span>
                     <span className="time">18:30</span>
                   </div>
                 </div>
@@ -263,10 +376,14 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="feature-text">
-            <span className="feature-badge">Agendamento Inteligente</span>
-            <h2>Seu feed planejado e organizado.</h2>
+            <span className="feature-badge">{tx(language, "Agendamento inteligente", "Smart scheduling")}</span>
+            <h2>{tx(language, "Seu feed planejado e organizado.", "Your feed, planned and organized.")}</h2>
             <p>
-              Visualize todos os seus posts agendados em um calendário intuitivo. Nossa IA prepara tudo para que seu feed se mantenha ativo sem esforço.
+              {tx(
+                language,
+                "Visualize seus posts agendados em um calendário intuitivo e mantenha seu Instagram ativo com consistência.",
+                "View scheduled posts in an intuitive calendar and keep your Instagram active consistently."
+              )}
             </p>
           </div>
         </div>
@@ -274,22 +391,26 @@ export default function LandingPage() {
         {/* Bloco 3 */}
         <div className="feature-row">
           <div className="feature-text">
-            <span className="feature-badge">Copywriting Convincente</span>
-            <h2>Legendas que vendem de verdade.</h2>
+            <span className="feature-badge">{tx(language, "Copywriting convincente", "Conversion copywriting")}</span>
+            <h2>{tx(language, "Legendas que vendem de verdade.", "Captions built to convert.")}</h2>
             <p>
-              A IA escreve copy persuasiva com chamadas para ação (CTAs) poderosas e seleciona as hashtags que trarão maior alcance orgânico para o seu perfil.
+              {tx(
+                language,
+                "A IA escreve legendas persuasivas com chamadas para ação e hashtags relevantes para o seu perfil.",
+                "AI writes persuasive captions with clear calls to action and relevant hashtags for your profile."
+              )}
             </p>
           </div>
           <div className="feature-visual">
             <div className="caption-mockup">
               <div className="caption-header">
                 <span>Copywriter IA</span>
-                <span className="badge">Conversão Máxima</span>
+                <span className="badge">{tx(language, "Conversão máxima", "High conversion")}</span>
               </div>
               <div className="caption-body">
-                <p className="typing-text">🚀 Quer parar de perder horas criando posts?</p>
-                <p>Com o Autonomy, seu Instagram é gerenciado de ponta a ponta de forma 100% autônoma.</p>
-                <p className="cta-highlight">👇 Clique no link da bio e comece hoje mesmo!</p>
+                <p className="typing-text">{tx(language, "Quer parar de perder horas criando posts?", "Want to stop losing hours creating posts?")}</p>
+                <p>{tx(language, "Com o Autonomy, seu Instagram ganha conteúdo profissional com muito menos trabalho.", "With Autonomy, your Instagram gets professional content with far less manual work.")}</p>
+                <p className="cta-highlight">{tx(language, "Clique no link da bio e comece hoje mesmo.", "Click the link in bio and start today.")}</p>
                 <p className="hashtags">#marketingdigital #ia #socialmedia #autonomiahub #produtividade</p>
               </div>
             </div>
@@ -298,53 +419,53 @@ export default function LandingPage() {
 
       </section>
 
-      {/* Seção 4: Planos */}
+      {/* Secao 4: planos */}
       <section className="plans-section" id="planos">
         <div className="section-heading text-center">
-          <h2>Escolha o plano ideal para o seu momento</h2>
-          <p className="subheading-text">Comece pequeno. Escale quando a demanda crescer.</p>
+          <h2>{tx(language, "Escolha o plano ideal para o seu momento", "Choose the right plan for your stage")}</h2>
+          <p className="subheading-text">{tx(language, "Comece pequeno. Escale quando a demanda crescer.", "Start small. Scale as demand grows.")}</p>
         </div>
         <div className="pricing-grid">
           {plans.map((plan) => (
             <article className={plan.featured ? "pricing-card featured" : "pricing-card"} key={plan.id}>
-              {plan.featured && <div className="popular-badge">Mais Popular</div>}
+              {plan.featured && <div className="popular-badge">{tx(language, "Mais popular", "Most popular")}</div>}
               <div className="card-top">
                 <h3>{plan.name}</h3>
-                <p className="plan-desc">{plan.description}</p>
+                <p className="plan-desc">{translatePlanText(plan.description, language)}</p>
               </div>
               <div className="card-price">
                 <strong>{plan.price}</strong>
-                <span className="period">/mês</span>
+                <span className="period">{tx(language, "/mês", "/month")}</span>
               </div>
               <div className="plan-meta">
-                <span>{plan.credits}</span>
-                <span>{plan.instagramAccounts}</span>
+                <span>{translatePlanText(plan.credits, language)}</span>
+                <span>{translatePlanText(plan.instagramAccounts, language)}</span>
               </div>
               <ul className="plan-features">
                 {plan.features.map((feature) => (
                   <li key={feature}>
                     <Check size={18} className="check-icon" />
-                    <span>{feature}</span>
+                    <span>{translatePlanText(feature, language)}</span>
                   </li>
                 ))}
               </ul>
               <Link 
                 className="plan-button" 
-                href={`/cadastro?plan=${plan.id}${email ? `&email=${encodeURIComponent(email)}` : ""}`}
+                href={`/cadastro?plan=${plan.id}${email ? `&email=${encodeURIComponent(email)}` : ""}${language === "en" ? "&lang=en" : ""}`}
               >
-                Escolher {plan.name}
+                {tx(language, `Escolher ${plan.name}`, `Choose ${plan.name}`)}
               </Link>
             </article>
           ))}
         </div>
       </section>
 
-      {/* Seção 3: FAQ Acordeão */}
+      {/* Secao 3: FAQ */}
       <section className="faq-section">
-        <h2>Perguntas Frequentes</h2>
-        <p className="faq-subtitle font-inter">Tire suas dúvidas antes de começar a escalar seu Instagram.</p>
+        <h2>{tx(language, "Perguntas frequentes", "Frequently asked questions")}</h2>
+        <p className="faq-subtitle font-inter">{tx(language, "Tire suas dúvidas antes de começar a escalar seu Instagram.", "Get answers before scaling your Instagram workflow.")}</p>
         <div className="faq-accordion">
-          {faqs.map((faq, index) => {
+          {localizedFaqs.map((faq, index) => {
             const isOpen = activeFaq === index;
             return (
               <div className="faq-item" key={index}>
@@ -365,28 +486,30 @@ export default function LandingPage() {
         </div>
 
         <form className="hero-cta-form bottom-cta-form" onSubmit={handleStart}>
-          <h3>Pronto para transformar seu Instagram?</h3>
+          <h3>{tx(language, "Pronto para transformar seu Instagram?", "Ready to transform your Instagram?")}</h3>
           <div className="cta-form-group">
             <input 
               type="email" 
-              placeholder="Insira seu endereço de e-mail" 
+              placeholder={tx(language, "Insira seu endereço de email", "Enter your email address")}
               required 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
             <button type="submit">
-              Começar Agora
+              {tx(language, "Começar agora", "Start now")}
               <ChevronRight size={20} />
             </button>
           </div>
         </form>
       </section>
 
-      {/* Rodapé */}
+      {/* Rodape */}
       <footer className="marketing-footer">
-        <p>&copy; {new Date().getFullYear()} Autonomy Hub. Todos os direitos reservados. Design Clean Tech.</p>
+        <p>
+          &copy; {new Date().getFullYear()} Autonomy Hub.{" "}
+          {tx(language, "Todos os direitos reservados.", "All rights reserved.")}
+        </p>
       </footer>
     </main>
   );
 }
-
