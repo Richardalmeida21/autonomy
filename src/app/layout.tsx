@@ -42,7 +42,13 @@ export default function RootLayout({
       }
     }
     if (shouldReload) {
-      location.reload();
+      try {
+        const url = new URL(location.href);
+        url.searchParams.set("cb", String(Date.now()));
+        location.replace(url.toString());
+      } catch (err) {
+        location.reload();
+      }
     }
   }
 
