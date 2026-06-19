@@ -23,13 +23,43 @@ export default function RootLayout({
             __html: `(function(){
   const reloadFlag = "autonomy.chunkReloaded";
   if (typeof window === "undefined") return;
-  function handleChunkError(message) {
-    if (!/ChunkLoadError|Loading chunk \\d+ failed|failed to fetch dynamically imported module/i.test(message)) return;
-    if (sessionStorage.getItem(reloadFlag) === "1") return;
-    sessionStorage.setItem(reloadFlag, "1");
-    location.reload();
+
+  function triggerReload() {
+    let shouldReload = true;
+    try {
+      const now = Date.now();
+      const lastReload = sessionStorage.getItem(reloadFlag);
+      if (lastReload && (now - parseInt(lastReload, 10) < 10000)) {
+        shouldReload = false;
+      } else {
+        sessionStorage.setItem(reloadFlag, String(now));
+      }
+    } catch (e) {
+      if (window.name === "autonomy_reloaded") {
+        shouldReload = false;
+      } else {
+        window.name = "autonomy_reloaded";
+      }
+    }
+    if (shouldReload) {
+      location.reload();
+    }
   }
-  window.addEventListener("error", (e) => handleChunkError(e.message || ""));
+
+  function handleChunkError(message) {
+    if (/ChunkLoadError|Loading chunk \\d+ failed|failed to fetch dynamically imported module/i.test(message)) {
+      triggerReload();
+    }
+  }
+
+  window.addEventListener("error", (e) => {
+    if (e.message) {
+      handleChunkError(e.message);
+    } else if (e.target && e.target.tagName === "SCRIPT" && e.target.src && e.target.src.indexOf("/_next/static/") !== -1) {
+      triggerReload();
+    }
+  }, true);
+
   window.addEventListener("unhandledrejection", (e) => {
     const err = e.reason;
     if (err && typeof err === "object" && err !== null && "message" in err) {
