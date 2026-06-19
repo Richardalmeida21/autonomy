@@ -1,12 +1,13 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, FormEvent } from "react";
-import { ChevronRight, Check, Plus, Minus, Sparkles, TrendingUp, Cpu } from "lucide-react";
+import { ChevronRight, Check, Plus, Minus, CalendarClock, Send } from "lucide-react";
 import { plans } from "@/lib/plans";
 import logoImg from "@/images/logo_autonomy.png";
+import postImg from "@/images/post.png";
 
 type Language = "pt" | "en";
 
@@ -151,26 +152,31 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="hero-section">
+        <div className="hero-tech-grid" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
         <div className="hero-content">
-          <span className="hero-badge">
-            <Sparkles size={14} className="badge-icon" />
-            {tx(language, "Nova inteligência artificial de imagem integrada", "Integrated AI image generation")}
-          </span>
           <h1>
-            {tx(
-              language,
-              "Seu feed do Instagram criado por IA. Enquanto você foca no seu negócio.",
-              "Your Instagram feed, created by AI while you focus on your business."
+            {language === "pt" ? (
+              <>
+                Enquanto a <span className="hero-brand-highlight">Autonomy</span> gera e automatiza seu conteúdo, <span className="hero-title-highlight">você foca no seu negócio!</span>
+              </>
+            ) : (
+              <>
+                While <span className="hero-brand-highlight">Autonomy</span> generates and automates your content, <span className="hero-title-highlight">you focus on your business!</span>
+              </>
             )}
           </h1>
           <h2>
             {tx(
               language,
-              "Crie, agende e publique conteúdos profissionais em segundos. Cancele quando quiser.",
-              "Create, schedule, and publish professional Instagram content in seconds. Cancel anytime."
+              "A plataforma de Inteligência Artificial que gera valor pra sua empresa!",
+              "The Artificial Intelligence platform that generates value for your business!"
             )}
           </h2>
-          
+
           <form className="hero-cta-form" onSubmit={handleStart}>
             <div className="cta-form-group">
               <input 
@@ -185,33 +191,18 @@ export default function LandingPage() {
                 <ChevronRight size={20} />
               </button>
             </div>
-            <p className="cta-disclaimer">{tx(language, "Experimente hoje mesmo. Sem compromisso de fidelidade.", "Try it today. No long-term commitment.")}</p>
           </form>
         </div>
 
-        {/* Visual Principal: Dashboard SaaS Mockup com Badges Flutuantes */}
-        <div className="dashboard-preview-container">
-          {/* Badges flutuantes de alta conversao */}
-          <div className="floating-badge fb-1">
-            <TrendingUp size={14} className="fb-icon" />
-            <span>{tx(language, "+214% Alcance Orgânico", "+214% organic reach")}</span>
-          </div>
-          <div className="floating-badge fb-2">
-            <Cpu size={14} className="fb-icon" />
-            <span>{tx(language, "IA autônoma ativa", "Autonomous AI active")}</span>
-          </div>
-          <div className="floating-badge fb-3">
-            <Sparkles size={14} className="fb-icon" />
-            <span>{tx(language, "Post pronto em 4s", "Post ready in 4s")}</span>
-          </div>
-
-          <div className="dashboard-preview-mockup">
-            <div className="mockup-window-header">
-              <div className="window-dots">
-                <span className="dot dot-red"></span>
-                <span className="dot dot-yellow"></span>
-                <span className="dot dot-green"></span>
-              </div>
+      {/* Visual Principal: Dashboard SaaS Mockup com Badges Flutuantes */}
+      <div className="dashboard-preview-container">
+        <div className="dashboard-preview-mockup">
+          <div className="mockup-window-header">
+            <div className="window-dots">
+              <span className="dot dot-red"></span>
+              <span className="dot dot-yellow"></span>
+              <span className="dot dot-green"></span>
+            </div>
               <div className="window-tab-active">
                 <span>{tx(language, "Autonomy AI - Painel de controle", "Autonomy AI - Dashboard")}</span>
               </div>
@@ -222,11 +213,11 @@ export default function LandingPage() {
               <div className="mockup-sidebar">
                 <div className="sidebar-group">
                   <label className="mockup-label">{tx(language, "Nicho de atuação", "Business niche")}</label>
-                  <div className="mockup-input">{tx(language, "Clínica de estética", "Aesthetic clinic")}</div>
+                  <div className="mockup-input">{tx(language, "Tecnologia", "Technology")}</div>
                 </div>
                 <div className="sidebar-group">
                   <label className="mockup-label">{tx(language, "Tema do post", "Post topic")}</label>
-                  <div className="mockup-input">{tx(language, "Tratamentos faciais naturais", "Natural facial treatments")}</div>
+                  <div className="mockup-input">{tx(language, "Melhor app de automação do Instagram", "Best Instagram automation app")}</div>
                 </div>
                 <div className="sidebar-group">
                   <label className="mockup-label">{tx(language, "Formato do post", "Post format")}</label>
@@ -240,33 +231,53 @@ export default function LandingPage() {
               {/* Output do Mockup */}
               <div className="mockup-output-area">
                 <div className="mockup-output-header">
-                  <span>{tx(language, "Visualização de saída", "Output preview")}</span>
-                  <span className="mockup-status-badge">{tx(language, "Pronto", "Ready")}</span>
+                  <span>{tx(language, "Post gerado", "Generated post")}</span>
+                  <div className="mockup-actions">
+                    <div className="mockup-btn">
+                      <CalendarClock size={13} />
+                      {tx(language, "Agendar", "Schedule")}
+                    </div>
+                    <div className="mockup-btn now">
+                      <Send size={13} />
+                      {tx(language, "Postar agora", "Publish now")}
+                    </div>
+                  </div>
                 </div>
                 <div className="mockup-post-card">
                   <div className="post-visual-box">
-                    <div className="visual-graphic">
-                      <span>{tx(language, "Pele natural e iluminada", "Natural glowing skin")}</span>
-                    </div>
+                    <Image
+                      src={postImg}
+                      alt={tx(language, "Post gerado pela Autonomy AI", "Post generated by Autonomy AI")}
+                      className="mockup-generated-image"
+                      fill
+                      sizes="150px"
+                    />
                   </div>
                   <div className="post-copy-box">
                     <div className="post-user-row">
-                      <div className="post-avatar-story-ring mini">
-                        <div className="post-avatar mini"></div>
+                      <div className="post-avatar-logo">
+                        <Image
+                          src={logoImg}
+                          alt="Autonomy AI"
+                          height={14}
+                          className="logo-img"
+                        />
                       </div>
-                      <strong className="post-card-username">clinica_renova</strong>
+                      <strong className="post-card-username">@useautonomy.ai</strong>
+                      <span className="automation-chip">{tx(language, "Automação ativa", "Automation active")}</span>
                     </div>
                     <strong>{tx(language, "Legenda sugerida", "Suggested caption")}</strong>
                     <p>
                       {tx(
                         language,
-                        "O segredo de um cuidado facial com excelentes resultados é manter a harmonia natural da sua pele.",
-                        "The secret to great facial care is keeping your skin's natural harmony."
+                        "Automatize sua presença no Instagram com posts criados por IA, organização de conteúdo e publicação em poucos cliques.",
+                        "Automate your Instagram presence with AI-generated posts, organized content, and publishing in just a few clicks."
                       )}
                     </p>
-                    <span className="post-tags">#estetica #pelelinda #bemestar</span>
+                    <span className="post-tags">#automacao #instagramai #useautonomy</span>
                   </div>
                 </div>
+                <HeroAutomationSteps language={language} />
               </div>
             </div>
           </div>
@@ -506,6 +517,32 @@ export default function LandingPage() {
         </p>
       </footer>
     </main>
+  );
+}
+
+function HeroAutomationSteps({ language }: { language: Language }) {
+  return (
+    <div className="hero-automation-container">
+      <div className="hero-automation-steps" aria-label={tx(language, "Fluxo de automação", "Automation flow")}>
+        <div className="automation-step step-1">
+          <span>{tx(language, "Autonomy", "Autonomy")}</span>
+          <strong>{tx(language, "Post gerado", "Post generated")}</strong>
+        </div>
+        <div className="automation-step step-2">
+          <span>{tx(language, "Instagram", "Instagram")}</span>
+          <strong>{tx(language, "Postagem automática", "Automatic posting")}</strong>
+        </div>
+        <div className="automation-step step-3">
+          <span>{tx(language, "Produtividade", "Productivity")}</span>
+          <strong>{tx(language, "Foco no seu negócio", "Focus on your business")}</strong>
+        </div>
+      </div>
+      <div className="automation-progress-container">
+        <div className="automation-progress-bar" />
+        <div className="progress-marker marker-1" />
+        <div className="progress-marker marker-2" />
+      </div>
+    </div>
   );
 }
 
