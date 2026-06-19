@@ -183,15 +183,17 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <Link className="auth-logo" href="/">
-          <Image src={logoImg} alt="Autonomy Logo" height={44} className="logo-img" />
-        </Link>
-        <h1>
-          {mode === "login"
-            ? tx(language, "Acesse seu painel", "Access your dashboard")
-            : tx(language, "Crie sua conta", "Create your account")}
-        </h1>
-        {mode === "signup" && <SignupSteps language={language} />}
+        <div className="auth-heading">
+          <Link className="auth-logo" href="/">
+            <Image src={logoImg} alt="Autonomy Logo" height={44} className="logo-img" />
+          </Link>
+          <h1>
+            {mode === "login"
+              ? tx(language, "Acesse seu painel", "Access your dashboard")
+              : tx(language, "Crie sua conta", "Create your account")}
+          </h1>
+          {mode === "signup" && <SignupSteps language={language} />}
+        </div>
         <form className="form-stack" onSubmit={submit}>
           {mode === "signup" && (
             <>

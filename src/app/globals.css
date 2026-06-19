@@ -1726,21 +1726,27 @@ button {
   gap: 20px;
 }
 
+.auth-heading {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  gap: 18px;
+}
+
 .auth-logo {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-bottom: 8px;
   text-align: center;
 }
 
 .auth-logo .logo-img {
   display: block;
   margin-inline: auto;
-  transform: translateX(-3px);
 }
 
 .auth-card h1 {
+  width: 100%;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 1.45rem;
   font-weight: 800;
