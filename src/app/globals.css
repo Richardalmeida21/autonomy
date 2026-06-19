@@ -2180,6 +2180,31 @@ textarea:focus {
   margin-top: 4px;
 }
 
+.credit-cost-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  border: 1px solid rgba(0, 82, 255, 0.1);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--muted);
+  background: rgba(0, 82, 255, 0.035);
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.credit-cost-card span {
+  font-weight: 600;
+}
+
+.credit-cost-card strong {
+  color: var(--accent);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .primary-button {
   color: #ffffff;
   background: var(--brand-gradient);

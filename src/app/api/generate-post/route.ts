@@ -20,6 +20,8 @@ export const runtime = "nodejs";
 
 type QueryableDatabase = Pick<Pool | PoolClient, "query">;
 
+const SIMPLE_POST_CREDIT_COST = 2;
+
 export async function POST(request: Request) {
   try {
     const user = await getUserFromRequest(request);
@@ -436,14 +438,19 @@ async function generateImageForOption({
 
 function getGenerationCreditCost(input: PostInput) {
   if (input.modo === "contextual") {
-    return 1;
+    return SIMPLE_POST_CREDIT_COST;
   }
 
   if (input.formato_visual === "carrossel") {
-    return input.quantidade_imagens || input.detalhes_carrossel?.length || 1;
+    const carouselImageCount = getCarouselImageCount(input);
+    return SIMPLE_POST_CREDIT_COST + Math.max(carouselImageCount - 1, 0);
   }
 
-  return 1;
+  return SIMPLE_POST_CREDIT_COST;
+}
+
+function getCarouselImageCount(input: Extract<PostInput, { modo: "criativo" }>) {
+  return input.quantidade_imagens || input.detalhes_carrossel?.length || 1;
 }
 
 async function assertGenerationAllowed({
@@ -500,7 +507,7 @@ async function assertGenerationAllowed({
   if (
     input.modo === "criativo" &&
     input.formato_visual === "carrossel" &&
-    creditCost > 4
+    getCarouselImageCount(input) > 4
   ) {
     throw new Error("Carrossel limitado a 4 imagens.");
   }

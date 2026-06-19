@@ -63,6 +63,7 @@ type DashboardProfile = {
 };
 
 const usageSummaryStorageKey = "autonomy.usageSummary";
+const simplePostCreditCost = 2;
 
 function tx(language: Language, pt: string, en: string) {
   return language === "en" ? en : pt;
@@ -228,6 +229,11 @@ export default function Home() {
     Math.min(Math.round((usedCredits / creditLimit) * 100), 100);
   const visibleScheduledPosts = getVisibleScheduledPosts(scheduledPosts);
   const sidebarScheduledCount = visibleScheduledPosts.length;
+  const generationCreditCost = getGenerationCreditCost({
+    carouselCount,
+    mode,
+    visualFormat
+  });
 
   const payload = useMemo(() => {
     if (mode === "criativo") {
@@ -1049,6 +1055,17 @@ export default function Home() {
             )}
 
             {error && <p className="error-message">{error}</p>}
+
+            <div className="credit-cost-card" aria-live="polite">
+              <span>{tx(language, "Você vai usar:", "You will use:")}</span>
+              <strong>
+                {tx(
+                  language,
+                  `${generationCreditCost} ${generationCreditCost === 1 ? "crédito" : "créditos"}`,
+                  `${generationCreditCost} ${generationCreditCost === 1 ? "credit" : "credits"}`
+                )}
+              </strong>
+            </div>
 
             <div className="button-row">
               <button className="secondary-button" type="button" onClick={fillExample}>
@@ -2134,6 +2151,22 @@ function getVisibleScheduledPosts(posts: ScheduledPost[]) {
     post.status === "publishing" ||
     post.status === "published"
   );
+}
+
+function getGenerationCreditCost({
+  carouselCount,
+  mode,
+  visualFormat
+}: {
+  carouselCount: number;
+  mode: Mode;
+  visualFormat: VisualFormat;
+}) {
+  if (mode === "criativo" && visualFormat === "carrossel") {
+    return simplePostCreditCost + Math.max(carouselCount - 1, 0);
+  }
+
+  return simplePostCreditCost;
 }
 
 function UsagePanel({
