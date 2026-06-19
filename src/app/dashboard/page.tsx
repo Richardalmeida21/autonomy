@@ -821,7 +821,7 @@ export default function Home() {
 
         <nav className="sidebar-nav" aria-label="Dashboard">
           <button
-            className={clsx(activeView === "gerar" && "active")}
+            className={clsx("nav-btn-gerar", activeView === "gerar" && "active")}
             type="button"
             onClick={() => setActiveView("gerar")}
           >
@@ -829,7 +829,7 @@ export default function Home() {
             <span className="nav-label">{tx(language, "Gerar post", "Generate post")}</span>
           </button>
           <button
-            className={clsx(activeView === "biblioteca" && "active")}
+            className={clsx("nav-btn-biblioteca", activeView === "biblioteca" && "active")}
             type="button"
             onClick={() => setActiveView("biblioteca")}
           >
@@ -838,7 +838,7 @@ export default function Home() {
             <span>{savedPosts.length}</span>
           </button>
           <button
-            className={clsx(activeView === "agenda" && "active")}
+            className={clsx("nav-btn-agenda", activeView === "agenda" && "active")}
             type="button"
             onClick={() => setActiveView("agenda")}
           >
@@ -847,7 +847,7 @@ export default function Home() {
             <span>{sidebarScheduledCount}</span>
           </button>
           <button
-            className={clsx(activeView === "conexoes" && "active")}
+            className={clsx("nav-btn-conexoes", activeView === "conexoes" && "active")}
             type="button"
             onClick={() => setActiveView("conexoes")}
           >
@@ -856,7 +856,7 @@ export default function Home() {
             <span>{socialAccounts.length}</span>
           </button>
           <button
-            className={clsx(activeView === "uso" && "active")}
+            className={clsx("nav-btn-uso", activeView === "uso" && "active")}
             type="button"
             onClick={() => setActiveView("uso")}
           >
@@ -864,7 +864,7 @@ export default function Home() {
             <span className="nav-label">{tx(language, "Uso e créditos", "Usage and credits")}</span>
           </button>
           <button
-            className={clsx(activeView === "perfil" && "active")}
+            className={clsx("nav-btn-perfil", activeView === "perfil" && "active")}
             type="button"
             onClick={() => setActiveView("perfil")}
           >
@@ -1290,7 +1290,17 @@ export default function Home() {
         )}
 
         {activeView === "perfil" && (
-          <ProfilePanel language={language} planName={activePlan.name} profile={profile} />
+          <ProfilePanel
+            language={language}
+            planName={activePlan.name}
+            profile={profile}
+            usageSummary={usageSummary}
+            remainingCredits={remainingCredits}
+            usedCredits={usedCredits}
+            creditLimit={creditLimit}
+            usagePercent={usagePercent}
+            onSignOut={signOut}
+          />
         )}
       </section>
     </main>
@@ -2635,11 +2645,23 @@ function getScheduleStatusLabel(status: ScheduledPost["status"], language: Langu
 function ProfilePanel({
   language,
   planName,
-  profile
+  profile,
+  usageSummary,
+  remainingCredits,
+  usedCredits,
+  creditLimit,
+  usagePercent,
+  onSignOut
 }: {
   language: Language;
   planName: string;
   profile: DashboardProfile;
+  usageSummary: UsageSummary | null;
+  remainingCredits: number;
+  usedCredits: number;
+  creditLimit: number;
+  usagePercent: number;
+  onSignOut: () => void | Promise<void>;
 }) {
   return (
     <DashboardSection
@@ -2664,6 +2686,33 @@ function ProfilePanel({
           <InfoRow label="CPF/CNPJ" value={profile.document || tx(language, "Não informado", "Not provided")} />
           <InfoRow label={tx(language, "Celular", "Phone")} value={profile.phone || tx(language, "Não informado", "Not provided")} />
           <InfoRow label={tx(language, "Plano", "Plan")} value={planName} />
+        </div>
+        
+        {/* Seção de créditos e sair apenas para dispositivos móveis */}
+        <div className="profile-credits-mobile">
+          <div className="sidebar-credits">
+            <div>
+              <span>{tx(language, "Créditos", "Credits")}</span>
+              <strong>{usageSummary ? remainingCredits : "..."}</strong>
+            </div>
+            <div className="usage-bar">
+              <span style={{ width: `${usagePercent}%` }} />
+            </div>
+            <p>
+              {usageSummary
+                ? tx(
+                    language,
+                    `${usedCredits} de ${creditLimit} usados (${usagePercent}%)`,
+                    `${usedCredits} of ${creditLimit} used (${usagePercent}%)`
+                  )
+                : tx(language, "Carregando créditos...", "Loading credits...")}
+            </p>
+          </div>
+          
+          <button className="signout-button-profile" type="button" onClick={onSignOut}>
+            <LogOut size={18} />
+            {tx(language, "Sair", "Sign out")}
+          </button>
         </div>
       </div>
     </DashboardSection>
