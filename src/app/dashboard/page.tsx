@@ -118,12 +118,16 @@ export default function Home() {
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
+  const [generatedSaveMessage, setGeneratedSaveMessage] = useState<string | null>(null);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isPublishingNow, setIsPublishingNow] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
-  const generatedPostSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isSavingGeneratedPost, setIsSavingGeneratedPost] = useState(false);
+  const [isPublishNowModalOpen, setIsPublishNowModalOpen] = useState(false);
   const lastSavedGeneratedSignature = useRef("");
+  const hasGeneratedPostChanges =
+    result !== null && getPostSignature(result) !== lastSavedGeneratedSignature.current;
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -210,14 +214,6 @@ export default function Home() {
     refreshUsageSummary().catch(() => undefined);
     refreshSocialData().catch(() => undefined);
   }, [language]);
-
-  useEffect(() => {
-    return () => {
-      if (generatedPostSaveTimer.current) {
-        clearTimeout(generatedPostSaveTimer.current);
-      }
-    };
-  }, []);
 
   const activePlan = getPlan(profile.plan) || plans[1];
   const creditLimit = usageSummary?.creditsLimit ?? activePlan.creditLimit;
@@ -450,33 +446,6 @@ export default function Home() {
     setSavedPosts((current) => [savedPost, ...current]);
   }
 
-  function queueGeneratedPostSave(id: string, generatedPost: GeneratedPost) {
-    const signature = getPostSignature(generatedPost);
-
-    if (signature === lastSavedGeneratedSignature.current) {
-      return;
-    }
-
-    if (generatedPostSaveTimer.current) {
-      clearTimeout(generatedPostSaveTimer.current);
-    }
-
-    generatedPostSaveTimer.current = setTimeout(async () => {
-      try {
-        await updateSavedPost(id, generatedPost);
-        lastSavedGeneratedSignature.current = signature;
-      } catch {
-        setError(
-          tx(
-            language,
-            "Não foi possível salvar as alterações do post automaticamente.",
-            "Could not automatically save the post changes."
-          )
-        );
-      }
-    }, 700);
-  }
-
   async function connectInstagram() {
     try {
       setScheduleError(null);
@@ -535,7 +504,7 @@ export default function Home() {
     }
   }
 
-  async function publishCurrentPostNow() {
+  async function publishCurrentPostNow(socialAccountId = selectedSocialAccountId) {
     if (!result) {
       return;
     }
@@ -545,7 +514,7 @@ export default function Home() {
     setIsPublishingNow(true);
 
     try {
-      if (!selectedSocialAccountId) {
+      if (!socialAccountId) {
         throw new Error(
           tx(language, "Conecte e selecione uma conta do Instagram.", "Connect and select an Instagram account.")
         );
@@ -554,10 +523,12 @@ export default function Home() {
       await schedulePost({
         post: result,
         publishNow: true,
-        socialAccountId: selectedSocialAccountId
+        socialAccountId
       });
+      setSelectedSocialAccountId(socialAccountId);
       await refreshSocialData();
       setScheduleMessage(tx(language, "Post publicado no Instagram.", "Post published on Instagram."));
+      setIsPublishNowModalOpen(false);
       setActiveView("agenda");
     } catch (caughtError) {
       setScheduleError(
@@ -651,25 +622,68 @@ export default function Home() {
 
       const nextResult = { ...current, post: nextPost };
 
-      if (currentSavedPostId) {
-        setSavedPosts((posts) =>
-          posts.map((savedPost) =>
-            savedPost.id === currentSavedPostId
-              ? {
-                  ...savedPost,
-                  modo_executado: nextResult.modo_executado,
-                  nicho: nextResult.nicho,
-                  formato_visual: nextResult.formato_visual,
-                  post: nextResult.post
-                }
-              : savedPost
-          )
-        );
-        queueGeneratedPostSave(currentSavedPostId, nextResult);
-      }
-
+      setGeneratedSaveMessage(null);
       return nextResult;
     });
+  }
+
+  async function saveGeneratedPostChanges() {
+    if (!result || !currentSavedPostId || !hasGeneratedPostChanges || isSavingGeneratedPost) {
+      return;
+    }
+
+    setIsSavingGeneratedPost(true);
+    setGeneratedSaveMessage(null);
+
+    try {
+      await updateSavedPost(currentSavedPostId, result);
+      setSavedPosts((posts) =>
+        posts.map((savedPost) =>
+          savedPost.id === currentSavedPostId
+            ? {
+                ...savedPost,
+                modo_executado: result.modo_executado,
+                nicho: result.nicho,
+                formato_visual: result.formato_visual,
+                post: result.post
+              }
+            : savedPost
+        )
+      );
+      lastSavedGeneratedSignature.current = getPostSignature(result);
+      setGeneratedSaveMessage(tx(language, "Alterações salvas.", "Changes saved."));
+    } catch (caughtError) {
+      setGeneratedSaveMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : tx(language, "Não foi possível salvar as alterações.", "Could not save the changes.")
+      );
+    } finally {
+      setIsSavingGeneratedPost(false);
+    }
+  }
+
+  function discardGeneratedPostChanges() {
+    if (!currentSavedPostId) {
+      return;
+    }
+
+    const savedPost = savedPosts.find((post) => post.id === currentSavedPostId);
+
+    if (!savedPost) {
+      return;
+    }
+
+    const restoredPost: GeneratedPost = {
+      formato_visual: savedPost.formato_visual,
+      modo_executado: savedPost.modo_executado,
+      nicho: savedPost.nicho,
+      post: savedPost.post
+    };
+
+    setResult(restoredPost);
+    lastSavedGeneratedSignature.current = getPostSignature(restoredPost);
+    setGeneratedSaveMessage(null);
   }
 
   async function updateSavedPostContent(id: string, nextPost: GeneratedPost["post"]) {
@@ -1105,6 +1119,18 @@ export default function Home() {
               onConfirm={(socialAccountId, dateTime) =>
                 scheduleCurrentPost(socialAccountId, dateTime)
               }
+              post={result.post}
+              selectedAccountId={selectedSocialAccountId}
+            />
+          )}
+          {result && isPublishNowModalOpen && (
+            <PublishNowModal
+              accounts={socialAccounts}
+              language={language}
+              isSubmitting={isPublishingNow}
+              onClose={() => setIsPublishNowModalOpen(false)}
+              onConfirm={publishCurrentPostNow}
+              post={result.post}
               selectedAccountId={selectedSocialAccountId}
             />
           )}
@@ -1134,7 +1160,7 @@ export default function Home() {
                     <button
                       className="schedule-button now"
                       type="button"
-                      onClick={publishCurrentPostNow}
+                      onClick={() => setIsPublishNowModalOpen(true)}
                       disabled={isScheduling || isPublishingNow || !result}
                     >
                       <Send size={16} />
@@ -1154,6 +1180,39 @@ export default function Home() {
                   </div>
                 }
               />
+              {(hasGeneratedPostChanges || generatedSaveMessage) && (
+                <div className="post-edit-actions generated-edit-actions" role="status">
+                  <span>
+                    {generatedSaveMessage ||
+                      tx(
+                        language,
+                        "Você editou este post. Salve para atualizar a biblioteca, agendamento e publicação.",
+                        "You edited this post. Save to update the library, schedule, and publishing."
+                      )}
+                  </span>
+                  {hasGeneratedPostChanges && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={discardGeneratedPostChanges}
+                        disabled={isSavingGeneratedPost}
+                      >
+                        {tx(language, "Descartar alterações", "Discard changes")}
+                      </button>
+                      <button
+                        className="primary"
+                        type="button"
+                        onClick={saveGeneratedPostChanges}
+                        disabled={isSavingGeneratedPost}
+                      >
+                        {isSavingGeneratedPost
+                          ? tx(language, "Salvando", "Saving")
+                          : tx(language, "Salvar alterações", "Save changes")}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="empty-state">
@@ -1547,6 +1606,7 @@ function SavedPostScheduler({
     socialAccounts[0]?.id || ""
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isSchedulingPost, setIsSchedulingPost] = useState(false);
   const [isPublishingPost, setIsPublishingPost] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -1584,14 +1644,14 @@ function SavedPostScheduler({
     }
   }
 
-  async function publishNow() {
+  async function publishNow(nextSocialAccountId: string) {
     if (isPublishingPost) {
       return;
     }
 
     setMessage(null);
 
-    if (!socialAccountId) {
+    if (!nextSocialAccountId) {
       setMessage(tx(language, "Conecte uma conta do Instagram.", "Connect an Instagram account."));
       return;
     }
@@ -1599,7 +1659,9 @@ function SavedPostScheduler({
     setIsPublishingPost(true);
 
     try {
-      await onPublishNow(post, socialAccountId);
+      setSocialAccountId(nextSocialAccountId);
+      await onPublishNow(post, nextSocialAccountId);
+      setIsPublishModalOpen(false);
     } finally {
       setIsPublishingPost(false);
     }
@@ -1619,7 +1681,7 @@ function SavedPostScheduler({
         <button
           className="now"
           type="button"
-          onClick={publishNow}
+          onClick={() => setIsPublishModalOpen(true)}
           disabled={isSchedulingPost || isPublishingPost}
         >
           <Send size={16} />
@@ -1635,6 +1697,18 @@ function SavedPostScheduler({
           isSubmitting={isSchedulingPost}
           onClose={() => setIsModalOpen(false)}
           onConfirm={schedule}
+          post={post.post}
+          selectedAccountId={socialAccountId}
+        />
+      )}
+      {isPublishModalOpen && (
+        <PublishNowModal
+          accounts={socialAccounts}
+          language={language}
+          isSubmitting={isPublishingPost}
+          onClose={() => setIsPublishModalOpen(false)}
+          onConfirm={publishNow}
+          post={post.post}
           selectedAccountId={socialAccountId}
         />
       )}
@@ -1649,6 +1723,7 @@ function ScheduleModal({
   isSubmitting = false,
   onClose,
   onConfirm,
+  post,
   selectedAccountId
 }: {
   accounts: SocialAccount[];
@@ -1657,6 +1732,7 @@ function ScheduleModal({
   isSubmitting?: boolean;
   onClose: () => void;
   onConfirm: (socialAccountId: string, dateTime: string) => void | Promise<void>;
+  post: GeneratedPost["post"];
   selectedAccountId: string;
 }) {
   const [localAccountId, setLocalAccountId] = useState(
@@ -1664,8 +1740,10 @@ function ScheduleModal({
   );
   const [localDateTime, setLocalDateTime] = useState(dateTime);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
   const [isLocallySubmitting, setIsLocallySubmitting] = useState(false);
   const isConfirming = isSubmitting || isLocallySubmitting;
+  const selectedAccount = accounts.find((account) => account.id === localAccountId) || null;
 
   useEffect(() => {
     setLocalAccountId((current) => {
@@ -1676,6 +1754,26 @@ function ScheduleModal({
       return selectedAccountId || accounts[0]?.id || "";
     });
   }, [accounts, selectedAccountId]);
+
+  function reviewSchedule() {
+    if (isConfirming) {
+      return;
+    }
+
+    setLocalError(null);
+
+    if (!localAccountId) {
+      setLocalError(tx(language, "Selecione uma conta do Instagram.", "Select an Instagram account."));
+      return;
+    }
+
+    if (!localDateTime) {
+      setLocalError(tx(language, "Escolha data e horário para publicar.", "Choose a publishing date and time."));
+      return;
+    }
+
+    setIsReviewing(true);
+  }
 
   async function confirmSchedule() {
     if (isConfirming) {
@@ -1724,7 +1822,11 @@ function ScheduleModal({
         <div className="schedule-modal-header">
           <div>
             <p className="eyebrow">{tx(language, "Agendamento", "Scheduling")}</p>
-            <h3>{tx(language, "Programar post", "Schedule post")}</h3>
+            <h3>
+              {isReviewing
+                ? tx(language, "Confirmar agendamento", "Confirm schedule")
+                : tx(language, "Programar post", "Schedule post")}
+            </h3>
           </div>
           <button
             type="button"
@@ -1736,6 +1838,17 @@ function ScheduleModal({
           </button>
         </div>
 
+        {isReviewing && (
+          <PostPublishSummary
+            account={selectedAccount}
+            dateTime={localDateTime}
+            language={language}
+            mode="schedule"
+            post={post}
+          />
+        )}
+
+        {!isReviewing && (
         <div className="schedule-modal-fields">
           <label>
             <span>{tx(language, "Conta do Instagram", "Instagram account")}</span>
@@ -1767,29 +1880,264 @@ function ScheduleModal({
           </label>
         </div>
 
+        )}
+
         {localError && <p className="error-message">{localError}</p>}
 
         <div className="schedule-modal-actions">
           <button
             className="modal-cancel-button"
             type="button"
-            onClick={onClose}
+            onClick={isReviewing ? () => setIsReviewing(false) : onClose}
             disabled={isConfirming}
           >
-            {tx(language, "Cancelar", "Cancel")}
+            {isReviewing
+              ? tx(language, "Voltar", "Back")
+              : tx(language, "Cancelar", "Cancel")}
           </button>
+          {isReviewing && (
+            <button
+              className="modal-discard-button"
+              type="button"
+              onClick={onClose}
+              disabled={isConfirming}
+            >
+              {tx(language, "Descartar", "Discard")}
+            </button>
+          )}
           <button
             className="schedule-button"
             type="button"
-            onClick={confirmSchedule}
+            onClick={isReviewing ? confirmSchedule : reviewSchedule}
             disabled={isConfirming}
           >
             <CalendarClock size={16} />
-            {isConfirming
-              ? tx(language, "Agendando...", "Scheduling...")
-              : tx(language, "Confirmar agendamento", "Confirm schedule")}
+            {isReviewing
+              ? isConfirming
+                ? tx(language, "Agendando...", "Scheduling...")
+                : tx(language, "Confirmar", "Confirm")
+              : tx(language, "Revisar agendamento", "Review schedule")}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PublishNowModal({
+  accounts,
+  language,
+  isSubmitting = false,
+  onClose,
+  onConfirm,
+  post,
+  selectedAccountId
+}: {
+  accounts: SocialAccount[];
+  language: Language;
+  isSubmitting?: boolean;
+  onClose: () => void;
+  onConfirm: (socialAccountId: string) => void | Promise<void>;
+  post: GeneratedPost["post"];
+  selectedAccountId: string;
+}) {
+  const [localAccountId, setLocalAccountId] = useState(
+    selectedAccountId || accounts[0]?.id || ""
+  );
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [isLocallySubmitting, setIsLocallySubmitting] = useState(false);
+  const isConfirming = isSubmitting || isLocallySubmitting;
+  const selectedAccount = accounts.find((account) => account.id === localAccountId) || null;
+
+  useEffect(() => {
+    setLocalAccountId((current) => {
+      if (current && accounts.some((account) => account.id === current)) {
+        return current;
+      }
+
+      return selectedAccountId || accounts[0]?.id || "";
+    });
+  }, [accounts, selectedAccountId]);
+
+  function reviewPublish() {
+    if (isConfirming) {
+      return;
+    }
+
+    setLocalError(null);
+
+    if (!localAccountId) {
+      setLocalError(tx(language, "Selecione uma conta do Instagram.", "Select an Instagram account."));
+      return;
+    }
+
+    setIsReviewing(true);
+  }
+
+  async function confirmPublish() {
+    if (isConfirming) {
+      return;
+    }
+
+    setLocalError(null);
+    setIsLocallySubmitting(true);
+
+    try {
+      await onConfirm(localAccountId);
+    } catch (caughtError) {
+      setLocalError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : tx(language, "Não foi possível publicar agora.", "Could not publish now.")
+      );
+    } finally {
+      setIsLocallySubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={isConfirming ? undefined : onClose}
+    >
+      <div
+        aria-modal="true"
+        className="schedule-modal"
+        role="dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="schedule-modal-header">
+          <div>
+            <p className="eyebrow">{tx(language, "Publicação", "Publishing")}</p>
+            <h3>
+              {isReviewing
+                ? tx(language, "Confirmar publicação", "Confirm publishing")
+                : tx(language, "Postar agora", "Publish now")}
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={tx(language, "Fechar", "Close")}
+            disabled={isConfirming}
+          >
+            X
+          </button>
+        </div>
+
+        {isReviewing ? (
+          <PostPublishSummary
+            account={selectedAccount}
+            language={language}
+            mode="now"
+            post={post}
+          />
+        ) : (
+          <div className="schedule-modal-fields">
+            <label>
+              <span>{tx(language, "Conta do Instagram", "Instagram account")}</span>
+              <select
+                value={localAccountId}
+                onChange={(event) => setLocalAccountId(event.target.value)}
+                disabled={accounts.length === 0 || isConfirming}
+              >
+                <option value="">
+                  {accounts.length === 0
+                    ? tx(language, "Nenhuma conta conectada", "No connected account")
+                    : tx(language, "Selecione uma conta", "Select an account")}
+                </option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    @{account.instagram_username || account.page_name || "instagram"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {localError && <p className="error-message">{localError}</p>}
+
+        <div className="schedule-modal-actions">
+          <button
+            className="modal-cancel-button"
+            type="button"
+            onClick={isReviewing ? () => setIsReviewing(false) : onClose}
+            disabled={isConfirming}
+          >
+            {isReviewing
+              ? tx(language, "Voltar", "Back")
+              : tx(language, "Cancelar", "Cancel")}
+          </button>
+          {isReviewing && (
+            <button
+              className="modal-discard-button"
+              type="button"
+              onClick={onClose}
+              disabled={isConfirming}
+            >
+              {tx(language, "Descartar", "Discard")}
+            </button>
+          )}
+          <button
+            className="schedule-button now"
+            type="button"
+            onClick={isReviewing ? confirmPublish : reviewPublish}
+            disabled={isConfirming}
+          >
+            <Send size={16} />
+            {isReviewing
+              ? isConfirming
+                ? tx(language, "Publicando...", "Publishing...")
+                : tx(language, "Confirmar", "Confirm")
+              : tx(language, "Revisar publicação", "Review publishing")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PostPublishSummary({
+  account,
+  dateTime,
+  language,
+  mode,
+  post
+}: {
+  account: SocialAccount | null;
+  dateTime?: string;
+  language: Language;
+  mode: "now" | "schedule";
+  post: GeneratedPost["post"];
+}) {
+  const images = getPostImages(post);
+  const accountLabel = account
+    ? `@${account.instagram_username || account.page_name || "instagram"}`
+    : tx(language, "Conta não selecionada", "No account selected");
+  const captionPreview = formatCaptionWithHashtags(post.caption, post.hashtags);
+  const dateLabel = dateTime
+    ? formatDateTime(new Date(dateTime).toISOString(), language)
+    : "";
+
+  return (
+    <div className="publish-confirmation">
+      <div className="publish-confirmation-grid">
+        <InfoRow
+          label={tx(language, "Ação", "Action")}
+          value={mode === "now" ? tx(language, "Publicar agora", "Publish now") : tx(language, "Agendar post", "Schedule post")}
+        />
+        <InfoRow label={tx(language, "Conta", "Account")} value={accountLabel} />
+        {mode === "schedule" && dateLabel && (
+          <InfoRow label={tx(language, "Data e horário", "Date and time")} value={dateLabel} />
+        )}
+        <InfoRow label={tx(language, "Imagens", "Images")} value={String(images.length)} />
+      </div>
+      <div className="publish-caption-preview">
+        <span>{tx(language, "Descrição", "Caption")}</span>
+        <p>{captionPreview}</p>
       </div>
     </div>
   );

@@ -3066,6 +3066,15 @@ textarea:focus {
   backdrop-filter: blur(8px);
 }
 
+.generated-edit-actions {
+  position: static;
+  bottom: auto;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
 .post-edit-actions span {
   color: #475569;
   font-size: 0.86rem;
@@ -3073,19 +3082,21 @@ textarea:focus {
 }
 
 .post-edit-actions div {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(118px, 142px));
   justify-content: flex-end;
   gap: 8px;
 }
 
 .post-edit-actions button {
-  min-height: 38px;
+  width: 100%;
+  min-height: 34px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 14px;
+  border-radius: 7px;
+  padding: 0 10px;
   background: #ffffff;
   color: #475569;
+  font-size: 0.8rem;
   font-weight: 800;
 }
 
@@ -3183,10 +3194,72 @@ textarea:focus {
   background: #ffffff;
 }
 
+.modal-discard-button {
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  color: #b91c1c;
+  background: #fff7f7;
+}
+
+.publish-confirmation {
+  display: grid;
+  gap: 14px;
+}
+
+.publish-confirmation-grid {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.publish-confirmation .info-row {
+  align-items: center;
+  padding-bottom: 8px;
+}
+
+.publish-confirmation .info-row span {
+  font-size: 0.8rem;
+}
+
+.publish-confirmation .info-row strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.publish-caption-preview {
+  display: grid;
+  gap: 7px;
+}
+
+.publish-caption-preview span {
+  color: var(--ink);
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.publish-caption-preview p {
+  max-height: 150px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: #334155;
+  background: #ffffff;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .topbar-actions button:disabled,
 .card-header button:disabled,
 .saved-post-scheduler button:disabled,
 .schedule-modal-actions button:disabled,
+.modal-discard-button:disabled,
 .schedule-modal-header button:disabled,
 .schedule-modal-fields select:disabled,
 .schedule-modal-fields input:disabled {
