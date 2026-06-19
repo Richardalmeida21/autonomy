@@ -30,6 +30,15 @@ const nextConfig: NextConfig = {
             value: "no-store, no-cache, must-revalidate, proxy-revalidate"
           }
         ]
+      },
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*"
+          }
+        ]
       }
     ];
   }
