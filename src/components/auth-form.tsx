@@ -57,6 +57,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         return;
       }
 
+      await assertSignupFieldsAvailable({ document, email, language });
+
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -71,6 +73,21 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       });
 
       if (signUpError) {
+        if (isAlreadyRegisteredError(signUpError.message)) {
+          const { data: signInData, error: existingAccountSignInError } =
+            await supabase.auth.signInWithPassword({
+              email,
+              password
+            });
+
+          if (existingAccountSignInError || !signInData.session?.access_token) {
+            throw signUpError;
+          }
+
+          await startCheckout(signInData.session.access_token);
+          return;
+        }
+
         throw signUpError;
       }
 
@@ -121,7 +138,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
-          ? caughtError.message
+          ? getFriendlyAuthError(caughtError.message, language)
           : tx(language, "Não foi possível continuar.", "Could not continue.")
       );
     } finally {
@@ -129,22 +146,52 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     }
   }
 
+  async function startCheckout(token: string) {
+    await saveProfile({
+      email,
+      fullName,
+      document,
+      phone
+    });
+
+    const checkoutResponse = await fetch("/api/checkout", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        plan: selectedPlan,
+        email,
+        name: fullName,
+        document,
+        phone
+      })
+    });
+    const checkout = await checkoutResponse.json();
+
+    if (!checkoutResponse.ok) {
+      throw new Error(
+        checkout.error ||
+          tx(language, "Nao foi possivel iniciar o pagamento.", "Could not start checkout.")
+      );
+    }
+
+    window.location.href = checkout.url;
+  }
+
   return (
     <main className="auth-page">
       <section className="auth-card">
         <Link className="auth-logo" href="/">
-          <Image src={logoImg} alt="Autonomy Logo" height={32} className="logo-img" />
+          <Image src={logoImg} alt="Autonomy Logo" height={44} className="logo-img" />
         </Link>
-        <p className="eyebrow">
-          {mode === "login"
-            ? tx(language, "Entrar", "Sign in")
-            : tx(language, "Criar conta", "Create account")}
-        </p>
         <h1>
           {mode === "login"
-            ? tx(language, "Acesse seu painel.", "Access your dashboard.")
-            : tx(language, "Crie sua conta e escolha seu plano.", "Create your account and choose your plan.")}
+            ? tx(language, "Acesse seu painel", "Access your dashboard")
+            : tx(language, "Crie sua conta", "Create your account")}
         </h1>
+        {mode === "signup" && <SignupSteps language={language} />}
         <form className="form-stack" onSubmit={submit}>
           {mode === "signup" && (
             <>
@@ -226,5 +273,132 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </p>
       </section>
     </main>
+  );
+}
+
+function SignupSteps({ language }: { language: Language }) {
+  return (
+    <div className="signup-steps" aria-label={tx(language, "Etapas do cadastro", "Signup steps")}>
+      <div className="active">
+        <span>1</span>
+        <strong>{tx(language, "Dados", "Details")}</strong>
+      </div>
+      <div>
+        <span>2</span>
+        <strong>{tx(language, "Plano", "Plan")}</strong>
+      </div>
+      <div>
+        <span>3</span>
+        <strong>{tx(language, "Pagamento", "Payment")}</strong>
+      </div>
+    </div>
+  );
+}
+
+async function assertSignupFieldsAvailable({
+  document,
+  email,
+  language
+}: {
+  document: string;
+  email: string;
+  language: Language;
+}) {
+  const response = await fetch("/api/signup/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ document, email })
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error ||
+        tx(language, "Nao foi possivel verificar seus dados.", "Could not verify your details.")
+    );
+  }
+
+  if (data.documentExists) {
+    throw new Error(
+      tx(
+        language,
+        "Ja existe um usuario com esse CPF ou CNPJ.",
+        "There is already a user with this tax ID."
+      )
+    );
+  }
+
+  if (data.emailExists) {
+    throw new Error(
+      tx(
+        language,
+        "Ja existe um usuario com esse email.",
+        "There is already a user with this email."
+      )
+    );
+  }
+}
+
+function getFriendlyAuthError(message: string, language: Language) {
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    normalizedMessage.includes("already registered") ||
+    normalizedMessage.includes("user already") ||
+    normalizedMessage.includes("already exists") ||
+    normalizedMessage.includes("usuario ja existe") ||
+    normalizedMessage.includes("usuário já existe")
+  ) {
+    return tx(
+      language,
+      "Ja existe um usuario com esse email.",
+      "There is already a user with this email."
+    );
+  }
+
+  if (
+    normalizedMessage.includes("cpf") ||
+    normalizedMessage.includes("cnpj") ||
+    normalizedMessage.includes("document")
+  ) {
+    return tx(
+      language,
+      "Ja existe um usuario com esse CPF ou CNPJ.",
+      "There is already a user with this tax ID."
+    );
+  }
+
+  if (normalizedMessage.includes("no such price")) {
+    return tx(
+      language,
+      "Nao foi possivel encontrar o plano selecionado. Tente novamente em instantes.",
+      "Could not find the selected plan. Please try again shortly."
+    );
+  }
+
+  if (normalizedMessage.includes("stripe_secret_key")) {
+    return tx(
+      language,
+      "Pagamento indisponivel no momento. Tente novamente em instantes.",
+      "Payment is temporarily unavailable. Please try again shortly."
+    );
+  }
+
+  if (normalizedMessage.includes("invalid login credentials")) {
+    return tx(language, "Email ou senha incorretos.", "Incorrect email or password.");
+  }
+
+  return message;
+}
+
+function isAlreadyRegisteredError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("already registered") ||
+    normalizedMessage.includes("user already") ||
+    normalizedMessage.includes("already exists") ||
+    normalizedMessage.includes("usuario ja existe") ||
+    normalizedMessage.includes("usuÃ¡rio jÃ¡ existe")
   );
 }

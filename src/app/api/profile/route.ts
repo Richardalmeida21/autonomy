@@ -95,6 +95,21 @@ export async function POST(request: Request) {
     }
 
     const database = getDatabase();
+    const existingDocument = await database.query(
+      `select id
+       from profiles
+       where regexp_replace(coalesce(document, ''), '\\D', '', 'g') = $1
+         and id <> $2
+       limit 1`,
+      [normalizeDocument(parsedProfile.data.document), user.id]
+    );
+
+    if ((existingDocument.rowCount || 0) > 0) {
+      return NextResponse.json(
+        { error: "Ja existe um usuario com esse CPF ou CNPJ." },
+        { status: 409 }
+      );
+    }
 
     await database.query(
       `insert into profiles (id, email, full_name, document, phone)
@@ -124,4 +139,8 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+function normalizeDocument(document: string) {
+  return document.replace(/\D/g, "");
 }
