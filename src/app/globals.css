@@ -1729,7 +1729,15 @@ button {
 .auth-logo {
   display: flex;
   justify-content: center;
+  align-items: center;
   margin-bottom: 8px;
+  text-align: center;
+}
+
+.auth-logo .logo-img {
+  display: block;
+  margin-inline: auto;
+  transform: translateX(-3px);
 }
 
 .auth-card h1 {
