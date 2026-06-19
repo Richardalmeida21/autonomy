@@ -8,6 +8,9 @@ import { ChevronRight, Check, Plus, Minus, CalendarClock, Send } from "lucide-re
 import { plans } from "@/lib/plans";
 import logoImg from "@/images/logo_autonomy.png";
 import postImg from "@/images/post.png";
+import nutriImg from "@/images/nutrição.jpg";
+import techImg from "@/images/tech.jpg";
+import financeImg from "@/images/finance.jpg";
 
 type Language = "pt" | "en";
 
@@ -52,6 +55,88 @@ export default function LandingPage() {
     setLanguage(nextLanguage);
     window.localStorage.setItem("autonomy.language", nextLanguage);
   }, []);
+
+  const [generationState, setGenerationState] = useState("idle");
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (generationState !== "idle") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setGenerationState("generating");
+        }
+      },
+      { threshold: 0.15 }
+    );
+
+    const el = document.getElementById("generated-posts-section");
+    if (el) observer.observe(el);
+
+    return () => {
+      if (el) observer.unobserve(el);
+    };
+  }, [generationState]);
+
+  useEffect(() => {
+    if (generationState !== "generating") return;
+
+    const startTime = Date.now();
+    const duration = 2500; // 2.5 seconds
+
+    const updateProgress = () => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(100, Math.floor((elapsed / duration) * 100));
+      setProgress(pct);
+
+      if (pct < 100) {
+        requestAnimationFrame(updateProgress);
+      } else {
+        setTimeout(() => {
+          setGenerationState("completed");
+        }, 300);
+      }
+    };
+
+    requestAnimationFrame(updateProgress);
+  }, [generationState]);
+
+  const demoPosts = [
+    {
+      id: 1,
+      titlePt: "Nutrição",
+      titleEn: "Nutrition",
+      themePt: "Alimentação Saudável",
+      themeEn: "Healthy Eating",
+      image: nutriImg,
+      captionPt: "Mudar seus hábitos alimentares não precisa ser um sacrifício. Pequenas substituições diárias geram grandes resultados a longo prazo. Quer aprender como estruturar sua rotina de alimentação de forma simples e nutritiva? Comece hoje adicionando mais alimentos naturais e vegetais no seu prato!",
+      captionEn: "Changing your eating habits doesn't have to be a sacrifice. Small daily replacements lead to great long-term results. Want to learn how to structure your eating routine simply and nutritively? Start today by adding more whole foods to your plate!",
+      hashtags: ["saude", "nutricao", "bemestar", "foco", "comidadeverdade"]
+    },
+    {
+      id: 2,
+      titlePt: "Tecnologia",
+      titleEn: "Technology",
+      themePt: "Inteligência Artificial",
+      themeEn: "Artificial Intelligence",
+      image: techImg,
+      captionPt: "A inteligência artificial está transformando a forma como criamos e gerenciamos conteúdo. Aqueles que adotam essas ferramentas hoje saem na frente no mercado digital. Qual automação você já utiliza no seu dia a dia profissional?",
+      captionEn: "Artificial intelligence is transforming how we create and manage content. Those who adopt these tools today stay ahead in the digital market. What automation do you already use in your professional day-to-day?",
+      hashtags: ["tecnologia", "ia", "autonomiacreativa", "marketingdigital", "inovacao"]
+    },
+    {
+      id: 3,
+      titlePt: "Finanças",
+      titleEn: "Finance",
+      themePt: "Planejamento Financeiro",
+      themeEn: "Financial Planning",
+      image: financeImg,
+      captionPt: "Organizar suas finanças pessoais é o primeiro passo para conquistar sua liberdade e realizar seus sonhos. Crie o hábito de registrar seus ganhos e gastos, monte uma reserva de emergência e comece a investir no seu futuro hoje mesmo!",
+      captionEn: "Organizing your personal finances is the first step to achieving your freedom and making your dreams come true. Build the habit of tracking income and expenses, set up an emergency fund, and start investing in your future today!",
+      hashtags: ["financas", "investimentos", "liberdadefinanceira", "dinheiro", "planejamento"]
+    }
+  ];
 
   const localizedFaqs =
     language === "en"
@@ -299,131 +384,83 @@ export default function LandingPage() {
       </section>
 
       {/* Secao 2: funcionalidades */}
-      <section className="features-section">
-        
-        {/* Bloco 1 */}
-        <div className="feature-row">
-          <div className="feature-text">
-            <span className="feature-badge">{tx(language, "Geração de imagem", "Image generation")}</span>
-            <h2>{tx(language, "Criação inteligente de imagens de alto impacto.", "Smart creation of high-impact visuals.")}</h2>
-            <p>
-              {tx(
-                language,
-                "Nossa inteligência artificial cria imagens profissionais adaptadas para o seu nicho, sem depender de ferramentas complexas.",
-                "Our AI creates professional visuals tailored to your niche, without relying on complex design tools."
-              )}
-            </p>
-          </div>
-          <div className="feature-visual">
-            <div className="phone-mockup">
-              <div className="phone-screen">
-                <div className="phone-header">
-                  <div className="post-avatar-story-ring medium">
-                    <div className="phone-avatar"></div>
-                  </div>
-                  <div className="phone-user-info">
-                    <span className="phone-username">{tx(language, "seu_perfil", "your_profile")}</span>
-                    <span className="phone-location">{tx(language, "Patrocinado", "Sponsored")}</span>
-                  </div>
-                </div>
-                <div className="phone-content-image">
-                  <div className="phone-content-overlay">
-                    <span>{tx(language, "Design automático com IA", "Automatic AI design")}</span>
-                  </div>
-                </div>
-                <div className="phone-actions-bar">
-                  <span className="action-icon">Like</span>
-                  <span className="action-icon">Comment</span>
-                  <span className="action-icon">Share</span>
-                </div>
-                <div className="phone-caption">
-                  <strong>{tx(language, "seu_perfil", "your_profile")}</strong> {tx(language, "Design premium criado em segundos pela IA.", "Premium design created by AI in seconds.")}
-                </div>
+            {/* Secao 2: simulador de posts gerados */}
+      <section className="features-section" id="generated-posts-section">
+        {generationState !== "completed" ? (
+          <div className="simulator-loading-container">
+            <div className="simulator-logo-pulse">
+              <Image src={logoImg} alt="Autonomy logo" width={260} height={58} className="logo-img" />
+            </div>
+            <div className="simulator-progress-wrapper">
+              <div className="simulator-progress-circle">
+                <svg viewBox="0 0 100 100">
+                  <circle className="circle-bg" cx="50" cy="50" r="40" />
+                  <circle 
+                    className="circle-progress" 
+                    cx="50" 
+                    cy="50" 
+                    r="40" 
+                    strokeDasharray="251.2" 
+                    strokeDashoffset={251.2 - (251.2 * progress) / 100}
+                  />
+                </svg>
+                <div className="progress-percentage">{progress}%</div>
               </div>
+              <p className="simulator-loading-text">
+                {tx(language, "Gerando posts...", "Generating posts...")}
+              </p>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="simulator-results-container fade-in">
+            <div className="section-heading text-center">
+              <h2>{tx(language, "Confira os posts gerados", "Check out the generated posts")}</h2>
+              <p className="subheading-text">
+                {tx(
+                  language,
+                  "Nossa inteligência artificial gerou e formatou esses posts automaticamente para o seu perfil.",
+                  "Our AI automatically generated and formatted these posts for your profile."
+                )}
+              </p>
+            </div>
+            <div className="simulator-posts-grid">
+              {demoPosts.map((post) => (
+                <article className="post-card compact simulator-card" key={post.id}>
+                  <div className="card-header-centered">
+                    <h4 className="card-title">{tx(language, post.titlePt, post.titleEn)}</h4>
+                    <p className="card-subtitle">{tx(language, post.themePt, post.themeEn)}</p>
+                  </div>
 
-        {/* Bloco 2 */}
-        <div className="feature-row reverse">
-          <div className="feature-visual">
-            <div className="calendar-mockup">
-              <div className="calendar-header">
-                <span>{tx(language, "Calendário editorial", "Editorial calendar")}</span>
-                <span className="calendar-month">{tx(language, "Junho 2026", "June 2026")}</span>
-              </div>
-              <div className="calendar-grid">
-                <div className="calendar-day">
-                  <span className="day-number">15</span>
-                  <div className="calendar-event published">
-                    <span>{tx(language, "Post carrossel", "Carousel post")}</span>
-                    <span className="time">12:00</span>
+                  <div className="generated-media">
+                    <div className="mock-cover">
+                      <Image 
+                        src={post.image} 
+                        alt={tx(language, post.titlePt, post.titleEn)} 
+                        width={400} 
+                        height={250} 
+                        style={{ width: "100%", height: "auto", display: "block" }}
+                        sizes="100vw"
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="calendar-day">
-                  <span className="day-number">16</span>
-                  <div className="calendar-event scheduled">
-                    <span>{tx(language, "Imagem única", "Single image")}</span>
-                    <span className="time">18:30</span>
+
+                  <div className="card-section">
+                    <h3>{tx(language, "Descrição", "Caption")}</h3>
+                    <p className="caption-text">{tx(language, post.captionPt, post.captionEn)}</p>
                   </div>
-                </div>
-                <div className="calendar-day">
-                  <span className="day-number">17</span>
-                  <div className="calendar-event scheduled active">
-                    <span>Post IA</span>
-                    <span className="time">09:15</span>
+
+                  <div className="hashtags">
+                    {post.hashtags.map((tag) => (
+                      <span key={tag}>#{tag}</span>
+                    ))}
                   </div>
-                </div>
-                <div className="calendar-day">
-                  <span className="day-number">18</span>
-                  <div className="calendar-event-empty"></div>
-                </div>
-              </div>
+                </article>
+              ))}
             </div>
           </div>
-          <div className="feature-text">
-            <span className="feature-badge">{tx(language, "Agendamento inteligente", "Smart scheduling")}</span>
-            <h2>{tx(language, "Seu feed planejado e organizado.", "Your feed, planned and organized.")}</h2>
-            <p>
-              {tx(
-                language,
-                "Visualize seus posts agendados em um calendário intuitivo e mantenha seu Instagram ativo com consistência.",
-                "View scheduled posts in an intuitive calendar and keep your Instagram active consistently."
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* Bloco 3 */}
-        <div className="feature-row">
-          <div className="feature-text">
-            <span className="feature-badge">{tx(language, "Copywriting convincente", "Conversion copywriting")}</span>
-            <h2>{tx(language, "Legendas que vendem de verdade.", "Captions built to convert.")}</h2>
-            <p>
-              {tx(
-                language,
-                "A IA escreve legendas persuasivas com chamadas para ação e hashtags relevantes para o seu perfil.",
-                "AI writes persuasive captions with clear calls to action and relevant hashtags for your profile."
-              )}
-            </p>
-          </div>
-          <div className="feature-visual">
-            <div className="caption-mockup">
-              <div className="caption-header">
-                <span>Copywriter IA</span>
-                <span className="badge">{tx(language, "Conversão máxima", "High conversion")}</span>
-              </div>
-              <div className="caption-body">
-                <p className="typing-text">{tx(language, "Quer parar de perder horas criando posts?", "Want to stop losing hours creating posts?")}</p>
-                <p>{tx(language, "Com o Autonomy, seu Instagram ganha conteúdo profissional com muito menos trabalho.", "With Autonomy, your Instagram gets professional content with far less manual work.")}</p>
-                <p className="cta-highlight">{tx(language, "Clique no link da bio e comece hoje mesmo.", "Click the link in bio and start today.")}</p>
-                <p className="hashtags">#marketingdigital #ia #socialmedia #autonomiahub #produtividade</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        )}
       </section>
+      
 
       {/* Secao 4: planos */}
       <section className="plans-section" id="planos">
