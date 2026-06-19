@@ -759,6 +759,11 @@ export default function Home() {
     window.location.href = "/login";
   }
 
+  function setDashboardLanguage(nextLanguage: Language) {
+    window.localStorage.setItem("autonomy.language", nextLanguage);
+    setLanguage(nextLanguage);
+  }
+
   return (
     <main className="dashboard-shell">
       <aside className="dashboard-sidebar">
@@ -770,6 +775,7 @@ export default function Home() {
             priority
             style={{ width: "auto", height: "32px", objectFit: "contain" }}
           />
+          <LanguageCards language={language} onChange={setDashboardLanguage} />
         </div>
 
         <div className="profile-summary">
@@ -2150,6 +2156,33 @@ function getVisibleScheduledPosts(posts: ScheduledPost[]) {
     post.status === "pending" ||
     post.status === "publishing" ||
     post.status === "published"
+  );
+}
+
+function LanguageCards({
+  language,
+  onChange
+}: {
+  language: Language;
+  onChange: (language: Language) => void;
+}) {
+  return (
+    <div className="language-cards compact" aria-label="Idioma">
+      <button
+        className={language === "pt" ? "active" : ""}
+        type="button"
+        onClick={() => onChange("pt")}
+      >
+        PT
+      </button>
+      <button
+        className={language === "en" ? "active" : ""}
+        type="button"
+        onClick={() => onChange("en")}
+      >
+        EN
+      </button>
+    </div>
   );
 }
 

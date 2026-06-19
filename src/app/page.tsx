@@ -122,6 +122,11 @@ export default function LandingPage() {
     setActiveFaq(activeFaq === index ? null : index);
   }
 
+  function setMarketingLanguage(nextLanguage: Language) {
+    setLanguage(nextLanguage);
+    window.localStorage.setItem("autonomy.language", nextLanguage);
+  }
+
   return (
     <main className="marketing-page">
       {/* Header */}
@@ -136,17 +141,7 @@ export default function LandingPage() {
           />
         </Link>
         <div className="nav-actions">
-          <button
-            className="nav-language-btn"
-            type="button"
-            onClick={() => {
-              const nextLanguage = language === "en" ? "pt" : "en";
-              setLanguage(nextLanguage);
-              window.localStorage.setItem("autonomy.language", nextLanguage);
-            }}
-          >
-            {language === "en" ? "Português" : "English"}
-          </button>
+          <LanguageCards language={language} onChange={setMarketingLanguage} />
           <Link className="nav-signin-btn" href={language === "en" ? "/login?lang=en" : "/login"}>
             {tx(language, "Entrar", "Sign in")}
           </Link>
@@ -511,5 +506,32 @@ export default function LandingPage() {
         </p>
       </footer>
     </main>
+  );
+}
+
+function LanguageCards({
+  language,
+  onChange
+}: {
+  language: Language;
+  onChange: (language: Language) => void;
+}) {
+  return (
+    <div className="language-cards" aria-label="Idioma">
+      <button
+        className={language === "pt" ? "active" : ""}
+        type="button"
+        onClick={() => onChange("pt")}
+      >
+        PT
+      </button>
+      <button
+        className={language === "en" ? "active" : ""}
+        type="button"
+        onClick={() => onChange("en")}
+      >
+        EN
+      </button>
+    </div>
   );
 }
