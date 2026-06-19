@@ -4286,7 +4286,7 @@ textarea:focus {
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
   .cards-grid,
   .button-row,
   .topbar {
@@ -4436,19 +4436,22 @@ textarea:focus {
   /* Mobile Dashboard Shell & Main Layout */
   .dashboard-shell {
     grid-template-columns: 1fr;
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: visible !important;
+    height: auto !important;
   }
 
   .dashboard-main {
-    margin-top: 56px;
-    margin-bottom: 64px;
-    padding: 16px;
-    height: calc(100vh - 120px);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding: 16px !important;
+    padding-top: 72px !important; /* 56px header + 16px padding */
+    padding-bottom: 96px !important; /* 64px tabbar + 32px spacing */
+    height: auto !important;
+    overflow: visible !important;
+    flex: 1;
   }
 
   /* Dashboard Sidebar container behavior */
@@ -4466,14 +4469,16 @@ textarea:focus {
   .brand-row {
     position: fixed;
     top: 0;
-    left: 0;
-    right: 0;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 100% !important;
+    max-width: 980px;
     height: 56px;
     background: #ffffff;
     border-bottom: 1px solid var(--line);
     display: flex !important;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     padding: 0 16px;
     z-index: 1000;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
@@ -4481,35 +4486,17 @@ textarea:focus {
 
   /* Fixed Top Right Language Toggle */
   .language-toggle {
-    display: flex !important;
-    position: fixed;
-    top: 12px;
-    right: 16px;
-    z-index: 1001;
-    background: var(--bg-hover, rgba(15, 23, 42, 0.05));
-    border: 1px solid var(--line);
-    color: var(--ink);
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    align-items: center;
-    justify-content: center;
-    height: 32px;
-  }
-
-  .language-toggle:hover {
-    display: flex !important;
-    background: rgba(15, 23, 42, 0.1);
+    display: none !important;
   }
 
   /* Fixed Bottom Tab Navigation */
   .sidebar-nav {
     position: fixed;
     bottom: 0;
-    left: 0;
-    right: 0;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 100% !important;
+    max-width: 980px;
     height: 64px;
     background: #ffffff;
     border-top: 1px solid var(--line);
@@ -4617,5 +4604,36 @@ textarea:focus {
 
   .signout-button-profile:hover {
     background: rgba(239, 68, 68, 0.08);
+  }
+
+  /* Stack integrations header (Connect card) vertically on mobile and tablets */
+  .integration-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+    text-align: left !important;
+  }
+
+  .integration-header button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Stack profile info fields vertically on very narrow screens to prevent text cut-off */
+  @media (max-width: 480px) {
+    .info-row {
+      flex-direction: column !important;
+      gap: 4px !important;
+      align-items: flex-start !important;
+      padding-bottom: 8px !important;
+    }
+    .info-row strong {
+      text-align: left !important;
+      word-break: break-all !important;
+      font-size: 0.9rem !important;
+    }
+    .info-row span {
+      font-size: 0.72rem !important;
+    }
   }
 }
