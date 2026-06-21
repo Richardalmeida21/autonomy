@@ -21,6 +21,10 @@ export const runtime = "nodejs";
 type QueryableDatabase = Pick<Pool | PoolClient, "query">;
 
 const SIMPLE_POST_CREDIT_COST = 2;
+type TextOnlyPostInput =
+  | Extract<PostInput, { modo: "criativo" }>
+  | Omit<Extract<PostInput, { modo: "contextual" }>, "imagem_do_usuario">
+  | Omit<Extract<PostInput, { modo: "produto" }>, "produto_imagens">;
 
 export async function POST(request: Request) {
   try {
@@ -92,7 +96,7 @@ export async function POST(request: Request) {
           visual_format:
             parsedInput.data.modo === "criativo"
               ? parsedInput.data.formato_visual
-              : "contextual",
+              : parsedInput.data.modo,
           status: "reserved",
           credits_before: usage.usedCredits,
           credits_after: usage.usedCredits + creditCost,
@@ -169,6 +173,8 @@ async function generatePost({
   systemPrompt: string;
   userId: string;
 }) {
+  const textOnlyInput = getTextOnlyInput(input);
+
   const response = await client.responses.create({
     model: getGenerationModel(),
     store: false,
@@ -179,7 +185,7 @@ async function generatePost({
         content: [
           {
             type: "input_text",
-            text: JSON.stringify(input, null, 2)
+            text: JSON.stringify(textOnlyInput, null, 2)
           }
         ]
       }
@@ -280,6 +286,26 @@ async function generatePost({
     generatedPost.post.generated_image = imageUrls[0] || null;
   }
 
+  if (input.modo === "produto") {
+    generatedPost.formato_visual = null;
+
+    const productImage = await generateProductImageFromUploads({
+      client,
+      headline: generatedPost.post.headline_da_imagem,
+      input,
+      overlayInstructions: generatedPost.post.overlay_instructions
+    });
+
+    const imageUrls = await uploadPostImages({
+      images: [productImage],
+      postId: crypto.randomUUID(),
+      userId
+    });
+
+    generatedPost.post.generated_images = imageUrls;
+    generatedPost.post.generated_image = imageUrls[0] || null;
+  }
+
   return generatedPost;
 }
 
@@ -294,45 +320,136 @@ async function generateContextualImageFromUpload({
   input: Extract<PostInput, { modo: "contextual" }>;
   overlayInstructions: string | null;
 }) {
-  try {
-    const uploadedImage = await dataUrlToFile(input.imagem_do_usuario);
-    const prompt = [
-      "Create a polished square Instagram feed image based on the uploaded image.",
-      "Preserve the uploaded image's main identity, logo, brand mark, objects, colors, and important visual features.",
-      "Apply only the requested contextual social-media composition changes.",
-      "",
-      "POST CONTEXT:",
-      input.contexto,
-      "",
-      "USER IMAGE DESCRIPTION:",
-      input.analise_da_imagem_do_usuario,
-      "",
-      "OVERLAY AND DESIGN INSTRUCTIONS:",
-      overlayInstructions || "Use a clean premium layout with balanced spacing.",
-      "",
-      `If text is needed, use only this Portuguese headline: "${headline}".`,
-      "If the user asks for a logo placement, keep the uploaded logo recognizable and place it exactly as requested.",
-      "Do not add fake UI, random words, watermarks, misspellings, or unrelated decorative elements.",
-      "Output a clean 1:1 Instagram-ready image."
-    ].join("\n");
+  const uploadedImage = await dataUrlToFile(input.imagem_do_usuario);
+  const prompt = [
+    "Create a polished square Instagram feed image based on the uploaded image.",
+    "Follow the user's requested edits literally. The uploaded image is the source of truth.",
+    "Preserve the uploaded image's main identity, logo, brand mark, people, hair, face, pose, objects, colors, and important visual features unless the user explicitly asks to change one of them.",
+    "When the uploaded image is a logo, keep the logo recognizable and place it exactly where the user requested within the final social-media composition.",
+    "When the uploaded image is a person, do not alter the person's appearance, face, hairstyle, hair color, hair texture, makeup, clothing, or pose unless explicitly requested.",
+    "Apply only the requested contextual social-media composition changes, such as neutral background, background replacement, crop, spacing, lighting polish, or logo placement.",
+    "",
+    "BUSINESS NICHE:",
+    input.nicho,
+    "",
+    "POST THEME:",
+    input.tema,
+    "",
+    "POST CONTEXT:",
+    input.contexto,
+    "",
+    "USER'S EXACT IMAGE EDIT REQUEST:",
+    input.analise_da_imagem_do_usuario,
+    "",
+    "OVERLAY AND DESIGN INSTRUCTIONS:",
+    overlayInstructions || "Use a clean premium layout with balanced spacing.",
+    "",
+    `If text is needed, use only this Portuguese headline: "${headline}".`,
+    "Do not add fake UI, random words, watermarks, misspellings, or unrelated decorative elements.",
+    "Output a clean 1:1 Instagram-ready image."
+  ].join("\n");
 
-    const result = await client.images.edit({
-      model: getImageModel(),
-      image: uploadedImage,
-      prompt,
-      size: "1024x1024",
-      quality: getImageQuality(),
-      n: 1
-    });
+  const result = await client.images.edit({
+    model: getImageModel(),
+    image: uploadedImage,
+    input_fidelity: "high",
+    prompt,
+    size: "1024x1024",
+    quality: getImageQuality(),
+    n: 1
+  });
 
-    const image = result.data?.[0]?.b64_json;
-    return image ? `data:image/png;base64,${image}` : null;
-  } catch {
-    return null;
+  const image = result.data?.[0]?.b64_json;
+
+  if (!image) {
+    throw new Error("Nao foi possivel gerar a imagem contextual.");
   }
+
+  return `data:image/png;base64,${image}`;
 }
 
-async function dataUrlToFile(dataUrl: string) {
+async function generateProductImageFromUploads({
+  client,
+  headline,
+  input,
+  overlayInstructions
+}: {
+  client: ReturnType<typeof getOpenAIClient>;
+  headline: string;
+  input: Extract<PostInput, { modo: "produto" }>;
+  overlayInstructions: string | null;
+}) {
+  const uploadedImages = await Promise.all(
+    input.produto_imagens.map((image, index) =>
+      dataUrlToFile(image, `product-reference-${index + 1}`)
+    )
+  );
+  const prompt = [
+    "Create one polished square Instagram product post image using the uploaded product reference image(s).",
+    "The uploaded product is the source of truth. Preserve the product exactly.",
+    "Do not alter, redesign, restyle, recolor, simplify, replace, or hallucinate any product detail.",
+    "Preserve the exact product shape, proportions, material, color, texture, pattern, print, logo, label, stitching, buttons, packaging, typography, and visible defects or unique details.",
+    "Use the additional reference images only to understand the same product from multiple angles and preserve its details more accurately.",
+    "If the user asks for a model wearing or holding the product, place the exact product from the references on that model without changing the product's design, print, color, fit-defining details, or brand marks.",
+    "If the product is clothing, keep the exact garment color, cut, print, fabric texture, seams, collar, sleeves, and visible design details from the uploaded references.",
+    "If the product is not clothing, keep its exact industrial design, packaging, labels, proportions, color, texture, and identifying marks from the uploaded references.",
+    "",
+    "BUSINESS NICHE:",
+    input.nicho,
+    "",
+    "POST THEME:",
+    input.tema,
+    "",
+    "REQUESTED BACKGROUND:",
+    input.fundo_do_post,
+    "",
+    "ADDITIONAL USER DETAILS:",
+    input.detalhes_adicionais || "No additional details.",
+    "",
+    "OVERLAY AND DESIGN INSTRUCTIONS:",
+    overlayInstructions || "Use a clean premium layout with balanced spacing.",
+    "",
+    `If text is needed, use only this Portuguese headline: "${headline}".`,
+    "The background, model, props, lighting, and composition may change only to match the user's request.",
+    "The product itself must remain visually identical to the uploaded references.",
+    "Do not add fake UI, random words, watermarks, misspellings, or unrelated decorative elements.",
+    "Output a clean 1:1 Instagram-ready image."
+  ].join("\n");
+
+  const result = await client.images.edit({
+    model: getImageModel(),
+    image: uploadedImages,
+    input_fidelity: "high",
+    prompt,
+    size: "1024x1024",
+    quality: getImageQuality(),
+    n: 1
+  });
+
+  const image = result.data?.[0]?.b64_json;
+
+  if (!image) {
+    throw new Error("Nao foi possivel gerar a imagem do produto.");
+  }
+
+  return `data:image/png;base64,${image}`;
+}
+
+function getTextOnlyInput(input: PostInput): TextOnlyPostInput {
+  if (input.modo === "contextual") {
+    const { imagem_do_usuario: _image, ...textOnlyInput } = input;
+    return textOnlyInput;
+  }
+
+  if (input.modo === "produto") {
+    const { produto_imagens: _images, ...textOnlyInput } = input;
+    return textOnlyInput;
+  }
+
+  return input;
+}
+
+async function dataUrlToFile(dataUrl: string, basename = "contextual-image") {
   const match = dataUrl.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
 
   if (!match) {
@@ -342,7 +459,7 @@ async function dataUrlToFile(dataUrl: string) {
   const [, contentType, base64] = match;
   const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1];
 
-  return toFile(Buffer.from(base64, "base64"), `contextual-image.${extension}`, {
+  return toFile(Buffer.from(base64, "base64"), `${basename}.${extension}`, {
     type: contentType
   });
 }
@@ -437,7 +554,7 @@ async function generateImageForOption({
 }
 
 function getGenerationCreditCost(input: PostInput) {
-  if (input.modo === "contextual") {
+  if (input.modo === "contextual" || input.modo === "produto") {
     return SIMPLE_POST_CREDIT_COST;
   }
 

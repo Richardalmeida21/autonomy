@@ -13,6 +13,7 @@ import {
   ImagePlus,
   Library,
   LogOut,
+  Package,
   Plug,
   Send,
   ShieldCheck,
@@ -49,7 +50,7 @@ import {
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getUsageSummary, type UsageSummary } from "@/lib/usage-client";
 
-type Mode = "criativo" | "contextual";
+type Mode = "criativo" | "contextual" | "produto";
 type VisualFormat = "imagem_unica" | "carrossel";
 type ActiveView = "gerar" | "biblioteca" | "agenda" | "conexoes" | "perfil" | "uso";
 type Language = "pt" | "en";
@@ -82,6 +83,13 @@ const examples = {
     context: "Como escolher uma cor que valoriza o tom de pele",
     image:
       "Foto de uma mulher de perfil mostrando cabelo com mechas loiras platinadas, fundo claro e iluminacao de estudio."
+  },
+  product: {
+    niche: "Loja de moda",
+    theme: "Camiseta estampada nova colecao",
+    background: "Fundo claro de estudio, minimalista, com luz suave e sombras naturais.",
+    details:
+      "Colocar uma modelo usando exatamente a camiseta enviada, sem alterar cor, estampa, corte, tecido ou qualquer detalhe do produto."
   }
 };
 
@@ -98,6 +106,9 @@ export default function Home() {
   const [context, setContext] = useState("");
   const [imageAnalysis, setImageAnalysis] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [productImages, setProductImages] = useState<string[]>([]);
+  const [productBackground, setProductBackground] = useState("");
+  const [productDetails, setProductDetails] = useState("");
   const [result, setResult] = useState<GeneratedPost | null>(null);
   const [currentSavedPostId, setCurrentSavedPostId] = useState<string | null>(null);
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
@@ -253,14 +264,25 @@ export default function Home() {
       };
     }
 
+    if (mode === "contextual") {
+      return {
+        modo: "contextual",
+        nicho: niche,
+        tema: theme,
+        contexto: context,
+        possui_imagem_propria: true,
+        imagem_do_usuario: imagePreview,
+        analise_da_imagem_do_usuario: imageAnalysis
+      };
+    }
+
     return {
-      modo: "contextual",
+      modo: "produto",
       nicho: niche,
       tema: theme,
-      contexto: context,
-      possui_imagem_propria: true,
-      imagem_do_usuario: imagePreview,
-      analise_da_imagem_do_usuario: imageAnalysis
+      produto_imagens: productImages,
+      fundo_do_post: productBackground,
+      detalhes_adicionais: productDetails
     };
   }, [
     carouselCount,
@@ -270,6 +292,9 @@ export default function Home() {
     imagePreview,
     mode,
     niche,
+    productBackground,
+    productDetails,
+    productImages,
     singleImageDetail,
     theme,
     visualFormat
@@ -285,6 +310,12 @@ export default function Home() {
       if (mode === "contextual" && !imagePreview) {
         throw new Error(
           tx(language, "Envie uma imagem para gerar o post contextual.", "Upload an image to generate a contextual post.")
+        );
+      }
+
+      if (mode === "produto" && productImages.length === 0) {
+        throw new Error(
+          tx(language, "Envie pelo menos uma imagem do produto.", "Upload at least one product image.")
         );
       }
 
@@ -400,10 +431,18 @@ export default function Home() {
       return;
     }
 
-    setNiche(examples.contextual.niche);
-    setTheme(examples.contextual.theme);
-    setContext(examples.contextual.context);
-    setImageAnalysis(examples.contextual.image);
+    if (mode === "contextual") {
+      setNiche(examples.contextual.niche);
+      setTheme(examples.contextual.theme);
+      setContext(examples.contextual.context);
+      setImageAnalysis(examples.contextual.image);
+      return;
+    }
+
+    setNiche(examples.product.niche);
+    setTheme(examples.product.theme);
+    setProductBackground(examples.product.background);
+    setProductDetails(examples.product.details);
   }
 
   function onImageChange(file?: File) {
@@ -415,6 +454,21 @@ export default function Home() {
     const reader = new FileReader();
     reader.onload = () => setImagePreview(String(reader.result));
     reader.readAsDataURL(file);
+  }
+
+  async function onProductImagesChange(files?: FileList | null) {
+    const selectedFiles = Array.from(files || []).slice(0, 3);
+
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
+    const images = await Promise.all(selectedFiles.map(readFileAsDataUrl));
+    setProductImages((current) => [...current, ...images].slice(0, 3));
+  }
+
+  function removeProductImage(index: number) {
+    setProductImages((current) => current.filter((_, imageIndex) => imageIndex !== index));
   }
 
   function updateCarouselCount(nextCount: number) {
@@ -924,6 +978,14 @@ export default function Home() {
               <ImagePlus size={17} />
               {tx(language, "Contextual", "Contextual")}
             </button>
+            <button
+              className={clsx(mode === "produto" && "active")}
+              type="button"
+              onClick={() => setMode("produto")}
+            >
+              <Package size={17} />
+              {tx(language, "Produto", "Product")}
+            </button>
           </div>
 
           <form onSubmit={onSubmit} className="form-stack">
@@ -1067,6 +1129,80 @@ export default function Home() {
                       language,
                       "Descreva a imagem. Em produção, este campo pode ser preenchido automaticamente por visão.",
                       "Describe the image. In production, this field can be filled automatically by vision analysis."
+                    )}
+                    rows={4}
+                  />
+                </label>
+              </>
+            )}
+
+            {mode === "produto" && (
+              <>
+                <div className="field-group">
+                  <span>{tx(language, "Imagens do produto", "Product images")}</span>
+                  <div className="product-upload-box">
+                    <div className="product-preview-grid">
+                      {productImages.length > 0 ? (
+                        productImages.map((image, index) => (
+                          <div className="product-preview-item" key={`${index}-${image.length}`}>
+                            <img src={image} alt={tx(language, `Produto ${index + 1}`, `Product ${index + 1}`)} />
+                            <button
+                              aria-label={tx(language, "Remover imagem", "Remove image")}
+                              type="button"
+                              onClick={() => removeProductImage(index)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="product-empty-preview">
+                          <UploadCloud size={28} />
+                        </div>
+                      )}
+                    </div>
+                    <label className="file-trigger">
+                      <span>{tx(language, "Enviar atÃ© 3 imagens", "Upload up to 3 images")}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(event) => onProductImagesChange(event.target.files)}
+                      />
+                    </label>
+                  </div>
+                  <p className="field-hint">
+                    {tx(
+                      language,
+                      "Use fotos de angulos diferentes para preservar cor, estampa, textura e detalhes.",
+                      "Use photos from different angles to preserve color, print, texture, and details."
+                    )}
+                  </p>
+                </div>
+
+                <label>
+                  <span>{tx(language, "Fundo do post", "Post background")}</span>
+                  <textarea
+                    value={productBackground}
+                    onChange={(event) => setProductBackground(event.target.value)}
+                    placeholder={tx(
+                      language,
+                      "Ex: fundo claro de estudio, bancada de marmore, rua urbana, cozinha premium...",
+                      "Ex: bright studio background, marble counter, urban street, premium kitchen..."
+                    )}
+                    rows={3}
+                  />
+                </label>
+
+                <label>
+                  <span>{tx(language, "Detalhes adicionais", "Additional details")}</span>
+                  <textarea
+                    value={productDetails}
+                    onChange={(event) => setProductDetails(event.target.value)}
+                    placeholder={tx(
+                      language,
+                      "Ex: colocar uma modelo usando o produto, manter exatamente cor, estampa e detalhes, luz suave...",
+                      "Ex: place a model wearing the product, keep exact color, print, and details, soft lighting..."
                     )}
                     rows={4}
                   />
@@ -3052,6 +3188,16 @@ function parseHashtags(value: string) {
     .map((tag) => tag.trim())
     .filter(Boolean)
     .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function formatCaptionWithHashtags(caption: string, hashtags: string[]) {
