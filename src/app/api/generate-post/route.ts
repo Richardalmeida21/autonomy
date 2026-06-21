@@ -352,7 +352,6 @@ async function generateContextualImageFromUpload({
   const result = await client.images.edit({
     model: getImageModel(),
     image: uploadedImage,
-    input_fidelity: "high",
     prompt,
     size: "1024x1024",
     quality: getImageQuality(),
@@ -419,7 +418,6 @@ async function generateProductImageFromUploads({
   const result = await client.images.edit({
     model: getImageModel(),
     image: uploadedImages,
-    input_fidelity: "high",
     prompt,
     size: "1024x1024",
     quality: getImageQuality(),
