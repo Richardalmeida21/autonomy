@@ -4990,6 +4990,32 @@ textarea:focus {
     justify-content: center !important;
   }
 
+  /* Reflow connected account cards for mobile: avatar + info + status on top row, disconnect button full-width below */
+  .account-item {
+    grid-template-columns: 42px minmax(0, 1fr) auto !important;
+    grid-template-rows: auto auto;
+    gap: 10px 12px !important;
+    padding: 14px !important;
+  }
+
+  .account-item strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-item > div span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-item button {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
   /* Stack profile info fields vertically on very narrow screens to prevent text cut-off */
   @media (max-width: 480px) {
     .info-row {
