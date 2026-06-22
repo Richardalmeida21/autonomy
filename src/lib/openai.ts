@@ -21,5 +21,5 @@ export function getGenerationModel() {
 }
 
 export function getImageModel() {
-  return process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
+  return process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 }

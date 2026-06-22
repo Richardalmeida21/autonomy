@@ -74,6 +74,20 @@ export const postInputSchema = z.union([
       .string()
       .trim()
       .min(10, "Descreva a imagem enviada pelo usuario.")
+  }),
+  z.object({
+    modo: z.literal("produto"),
+    nicho: z.string().trim().min(2, "Informe um nicho."),
+    tema: z.string().trim().min(3, "Informe um tema."),
+    produto_imagens: z
+      .array(imageDataUrlSchema)
+      .min(1, "Envie pelo menos uma imagem do produto.")
+      .max(3, "Envie no maximo 3 imagens do produto."),
+    fundo_do_post: z
+      .string()
+      .trim()
+      .min(5, "Descreva como deve ser o fundo do post."),
+    detalhes_adicionais: z.string().trim().optional().default("")
   })
 ]);
 
@@ -86,7 +100,7 @@ export const generatedPostSchema = {
   properties: {
     modo_executado: {
       type: "string",
-      enum: ["criativo", "contextual"]
+      enum: ["criativo", "contextual", "produto"]
     },
     nicho: {
       type: "string"
@@ -158,7 +172,7 @@ const generatedOptionZodSchema = z.object({
 });
 
 export const generatedPostZodSchema = z.object({
-  modo_executado: z.enum(["criativo", "contextual"]),
+  modo_executado: z.enum(["criativo", "contextual", "produto"]),
   nicho: z.string(),
   formato_visual: z.enum(["imagem_unica", "carrossel"]).nullable().optional().default(null),
   post: generatedOptionZodSchema

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, FormEvent } from "react";
-import { ChevronRight, Check, Plus, Minus, CalendarClock, Send } from "lucide-react";
+import { useEffect, useRef, useState, FormEvent } from "react";
+import { Bookmark, ChevronLeft, ChevronRight, Check, Heart, MessageCircle, MoreHorizontal, Plus, Minus, CalendarClock, Send } from "lucide-react";
 import { plans } from "@/lib/plans";
 import logoImg from "@/images/logo_autonomy.png";
 import postImg from "@/images/post.png";
@@ -44,6 +44,7 @@ export default function LandingPage() {
   const [language, setLanguage] = useState<Language>("pt");
   const [email, setEmail] = useState("");
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
+  const postsCarouselRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -102,6 +103,18 @@ export default function LandingPage() {
     requestAnimationFrame(updateProgress);
   }, [generationState]);
 
+  useEffect(() => {
+    if (generationState !== "completed") return;
+    const timeout = window.setTimeout(() => {
+      const carousel = postsCarouselRef.current;
+      if (!carousel) return;
+      carousel.scrollLeft = 0;
+      carousel.scrollTo({ left: 0, behavior: "auto" });
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [generationState]);
+
   const demoPosts = [
     {
       id: 1,
@@ -110,6 +123,8 @@ export default function LandingPage() {
       themePt: "Alimentação Saudável",
       themeEn: "Healthy Eating",
       image: nutriImg,
+      likesPt: "2.847 curtidas",
+      likesEn: "2,847 likes",
       captionPt: "Mudar seus hábitos alimentares não precisa ser um sacrifício. Pequenas substituições diárias geram grandes resultados a longo prazo. Quer aprender como estruturar sua rotina de alimentação de forma simples e nutritiva? Comece hoje adicionando mais alimentos naturais e vegetais no seu prato!",
       captionEn: "Changing your eating habits doesn't have to be a sacrifice. Small daily replacements lead to great long-term results. Want to learn how to structure your eating routine simply and nutritively? Start today by adding more whole foods to your plate!",
       hashtags: ["saude", "nutricao", "bemestar", "foco", "comidadeverdade"]
@@ -121,6 +136,8 @@ export default function LandingPage() {
       themePt: "Inteligência Artificial",
       themeEn: "Artificial Intelligence",
       image: techImg,
+      likesPt: "5.193 curtidas",
+      likesEn: "5,193 likes",
       captionPt: "A inteligência artificial está transformando a forma como criamos e gerenciamos conteúdo. Aqueles que adotam essas ferramentas hoje saem na frente no mercado digital. Qual automação você já utiliza no seu dia a dia profissional?",
       captionEn: "Artificial intelligence is transforming how we create and manage content. Those who adopt these tools today stay ahead in the digital market. What automation do you already use in your professional day-to-day?",
       hashtags: ["tecnologia", "ia", "autonomiacreativa", "marketingdigital", "inovacao"]
@@ -132,6 +149,8 @@ export default function LandingPage() {
       themePt: "Planejamento Financeiro",
       themeEn: "Financial Planning",
       image: financeImg,
+      likesPt: "1.672 curtidas",
+      likesEn: "1,672 likes",
       captionPt: "Organizar suas finanças pessoais é o primeiro passo para conquistar sua liberdade e realizar seus sonhos. Crie o hábito de registrar seus ganhos e gastos, monte uma reserva de emergência e comece a investir no seu futuro hoje mesmo!",
       captionEn: "Organizing your personal finances is the first step to achieving your freedom and making your dreams come true. Build the habit of tracking income and expenses, set up an emergency fund, and start investing in your future today!",
       hashtags: ["financas", "investimentos", "liberdadefinanceira", "dinheiro", "planejamento"]
@@ -213,6 +232,19 @@ export default function LandingPage() {
     window.localStorage.setItem("autonomy.language", nextLanguage);
   }
 
+  function scrollPostsCarousel(direction: "previous" | "next") {
+    const carousel = postsCarouselRef.current;
+    if (!carousel) return;
+
+    const card = carousel.querySelector<HTMLElement>(".simulator-card");
+    const gap = Number.parseFloat(window.getComputedStyle(carousel).columnGap || "16");
+    const distance = card ? card.offsetWidth + gap : carousel.clientWidth * 0.7;
+    carousel.scrollBy({
+      left: direction === "next" ? distance : -distance,
+      behavior: "smooth"
+    });
+  }
+
   return (
     <main className="marketing-page">
       {/* Header */}
@@ -262,21 +294,6 @@ export default function LandingPage() {
             )}
           </h2>
 
-          <form className="hero-cta-form" onSubmit={handleStart}>
-            <div className="cta-form-group">
-              <input 
-                type="email" 
-                placeholder={tx(language, "Insira seu endereço de email", "Enter your email address")}
-                required 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              <button type="submit">
-                {tx(language, "Começar agora", "Start now")}
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          </form>
         </div>
 
       {/* Visual Principal: Dashboard SaaS Mockup com Badges Flutuantes */}
@@ -334,8 +351,9 @@ export default function LandingPage() {
                       src={postImg}
                       alt={tx(language, "Post gerado pela Autonomy AI", "Post generated by Autonomy AI")}
                       className="mockup-generated-image"
-                      fill
-                      sizes="150px"
+                      width={1024}
+                      height={1024}
+                      sizes="(max-width: 980px) 100vw, 150px"
                     />
                   </div>
                   <div className="post-copy-box">
@@ -418,17 +436,36 @@ export default function LandingPage() {
               <p className="subheading-text">
                 {tx(
                   language,
-                  "Nossa inteligência artificial gerou e formatou esses posts automaticamente para o seu perfil.",
+                  "Nossa inteligência artificial gera e formata posts automaticamente para o seu perfil, independente do nicho ou tema escolhido",
                   "Our AI automatically generated and formatted these posts for your profile."
                 )}
               </p>
             </div>
-            <div className="simulator-posts-grid">
-              {demoPosts.map((post) => (
-                <article className="post-card compact simulator-card" key={post.id}>
-                  <div className="card-header-centered">
-                    <h4 className="card-title">{tx(language, post.titlePt, post.titleEn)}</h4>
-                    <p className="card-subtitle">{tx(language, post.themePt, post.themeEn)}</p>
+            <div className="simulator-carousel-shell">
+              <button
+                type="button"
+                className="simulator-carousel-button previous"
+                aria-label={tx(language, "Post anterior", "Previous post")}
+                onClick={() => scrollPostsCarousel("previous")}
+              >
+                <ChevronLeft size={22} />
+              </button>
+              <div className="simulator-posts-grid" ref={postsCarouselRef}>
+                {demoPosts.map((post) => (
+                  <article className="post-card compact simulator-card" key={post.id}>
+                  <div className="instagram-post-header">
+                    <div className="instagram-profile">
+                      <div className="instagram-avatar">
+                        {tx(language, post.titlePt, post.titleEn).slice(0, 1)}
+                      </div>
+                      <div>
+                        <h4 className="card-title">{tx(language, post.titlePt, post.titleEn)}</h4>
+                        <p className="card-subtitle">{tx(language, post.themePt, post.themeEn)}</p>
+                      </div>
+                    </div>
+                    <button type="button" className="instagram-more-button" aria-label={tx(language, "Mais opcoes", "More options")}>
+                      <MoreHorizontal size={20} />
+                    </button>
                   </div>
 
                   <div className="generated-media">
@@ -444,18 +481,42 @@ export default function LandingPage() {
                     </div>
                   </div>
 
-                  <div className="card-section">
-                    <h3>{tx(language, "Descrição", "Caption")}</h3>
-                    <p className="caption-text">{tx(language, post.captionPt, post.captionEn)}</p>
-                  </div>
+                  <div className="instagram-post-body">
+                    <div className="instagram-actions">
+                      <div className="instagram-action-left">
+                        <Heart size={21} />
+                        <MessageCircle size={21} />
+                        <Send size={21} />
+                      </div>
+                      <Bookmark size={21} />
+                    </div>
 
-                  <div className="hashtags">
-                    {post.hashtags.map((tag) => (
-                      <span key={tag}>#{tag}</span>
-                    ))}
+                    <strong className="instagram-likes">
+                      {tx(language, post.likesPt, post.likesEn)}
+                    </strong>
+
+                    <p className="caption-text">
+                      <strong>@useautonomy.ai</strong>{" "}
+                      {tx(language, post.captionPt, post.captionEn)}
+                    </p>
+
+                    <div className="hashtags">
+                      {post.hashtags.map((tag) => (
+                        <span key={tag}>#{tag}</span>
+                      ))}
+                    </div>
                   </div>
-                </article>
-              ))}
+                  </article>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="simulator-carousel-button next"
+                aria-label={tx(language, "Próximo post", "Next post")}
+                onClick={() => scrollPostsCarousel("next")}
+              >
+                <ChevronRight size={22} />
+              </button>
             </div>
           </div>
         )}
@@ -529,11 +590,20 @@ export default function LandingPage() {
         </div>
 
         <form className="hero-cta-form bottom-cta-form" onSubmit={handleStart}>
-          <h3>{tx(language, "Pronto para transformar seu Instagram?", "Ready to transform your Instagram?")}</h3>
-          <div className="cta-form-group">
+          <div className="bottom-cta-copy">
+            <span className="bottom-cta-kicker">{tx(language, "IA pronta para publicar", "AI ready to publish")}</span>
+            <h3>{tx(language, "Transforme ideias em posts prontos para crescer.", "Turn ideas into ready-to-grow posts.")}</h3>
+            <p>
+              {tx(
+                language,
+                "Crie imagens, legendas e hashtags com consistencia de marca em poucos cliques.",
+                "Create images, captions, and hashtags with brand consistency in a few clicks."
+              )}
+            </p>
+            <div className="cta-form-group">
             <input 
               type="email" 
-              placeholder={tx(language, "Insira seu endereço de email", "Enter your email address")}
+              placeholder={tx(language, "Insira seu email", "Enter your email")}
               required 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -542,6 +612,36 @@ export default function LandingPage() {
               {tx(language, "Começar agora", "Start now")}
               <ChevronRight size={20} />
             </button>
+            </div>
+          </div>
+
+          <div className="bottom-cta-visual" aria-hidden="true">
+            <div className="cta-signal-header">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div className="cta-signal-flow">
+              <div className="cta-signal-step active">
+                <span>01</span>
+                <strong>{tx(language, "Nicho", "Niche")}</strong>
+              </div>
+              <div className="cta-signal-line"></div>
+              <div className="cta-signal-step">
+                <span>02</span>
+                <strong>{tx(language, "Criativo", "Creative")}</strong>
+              </div>
+              <div className="cta-signal-line"></div>
+              <div className="cta-signal-step">
+                <span>03</span>
+                <strong>{tx(language, "Post", "Post")}</strong>
+              </div>
+            </div>
+            <div className="cta-preview-stack">
+              <div className="cta-preview-card primary"></div>
+              <div className="cta-preview-card secondary"></div>
+              <div className="cta-preview-card tertiary"></div>
+            </div>
           </div>
         </form>
       </section>
