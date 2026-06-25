@@ -3228,9 +3228,17 @@ textarea:focus {
 
 .button-row {
   display: grid;
-  grid-template-columns: 0.8fr 1.2fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   gap: 10px;
   margin-top: 4px;
+}
+
+.button-row button {
+  min-width: 0;
+  padding: 0 12px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
 }
 
 .credit-cost-card {
@@ -3299,6 +3307,13 @@ textarea:focus {
   background: var(--brand-gradient-hover);
   transform: translateY(-1px);
   box-shadow: 0 10px 22px rgba(0, 82, 255, 0.22);
+}
+
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
 }
 
 .error-message {
@@ -3845,9 +3860,9 @@ textarea:focus {
 }
 
 .schedule-modal-fields select,
-.schedule-modal-fields input {
+.schedule-modal-fields input,
+.schedule-modal-fields textarea {
   width: 100%;
-  min-height: 44px;
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 8px;
   color: var(--ink);
@@ -3856,12 +3871,25 @@ textarea:focus {
   font-size: 0.92rem;
 }
 
+.schedule-modal-fields select,
+.schedule-modal-fields input {
+  min-height: 44px;
+}
+
 .schedule-modal-fields select {
   padding: 0 12px;
 }
 
 .schedule-modal-fields input {
   padding: 0 12px;
+}
+
+.schedule-modal-fields textarea {
+  min-height: 130px;
+}
+
+.autofill-modal {
+  width: min(100%, 520px);
 }
 
 .schedule-modal-actions {

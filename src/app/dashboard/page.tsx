@@ -62,6 +62,16 @@ type DashboardProfile = {
   phone: string;
   plan: string;
 };
+type AutofillResult = {
+  niche: string;
+  theme: string;
+  singleImageDetail: string;
+  carouselDetails: string[];
+  context: string;
+  imageAnalysis: string;
+  productBackground: string;
+  productDetails: string;
+};
 
 const usageSummaryStorageKey = "autonomy.usageSummary";
 const simplePostCreditCost = 2;
@@ -69,29 +79,6 @@ const simplePostCreditCost = 2;
 function tx(language: Language, pt: string, en: string) {
   return language === "en" ? en : pt;
 }
-
-const examples = {
-  creative: {
-    niche: "Clinica de estetica",
-    theme: "Tratamentos faciais que parecem naturais",
-    imageDetail:
-      "Mulher de 35 anos em uma clinica moderna, pele natural e iluminada, segurando um espelho pequeno, com fundo limpo em tons claros e sensacao premium."
-  },
-  contextual: {
-    niche: "Salao de beleza",
-    theme: "Cores de cabelo tendencia 2026",
-    context: "Como escolher uma cor que valoriza o tom de pele",
-    image:
-      "Foto de uma mulher de perfil mostrando cabelo com mechas loiras platinadas, fundo claro e iluminacao de estudio."
-  },
-  product: {
-    niche: "Loja de moda",
-    theme: "Camiseta estampada nova colecao",
-    background: "Fundo claro de estudio, minimalista, com luz suave e sombras naturais.",
-    details:
-      "Colocar uma modelo usando exatamente a camiseta enviada, sem alterar cor, estampa, corte, tecido ou qualquer detalhe do produto."
-  }
-};
 
 export default function Home() {
   const [language, setLanguage] = useState<Language>("pt");
@@ -132,6 +119,8 @@ export default function Home() {
   const [generatedSaveMessage, setGeneratedSaveMessage] = useState<string | null>(null);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAutofillModalOpen, setIsAutofillModalOpen] = useState(false);
+  const [isAutofilling, setIsAutofilling] = useState(false);
   const [isPublishingNow, setIsPublishingNow] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [isSavingGeneratedPost, setIsSavingGeneratedPost] = useState(false);
@@ -422,27 +411,90 @@ export default function Home() {
     );
   }
 
-  function fillExample() {
-    if (mode === "criativo") {
-      setNiche(examples.creative.niche);
-      setTheme(examples.creative.theme);
-      setVisualFormat("imagem_unica");
-      setSingleImageDetail(examples.creative.imageDetail);
-      return;
-    }
+  async function autofillPostFields(description: string) {
+    setError(null);
+    setIsAutofilling(true);
 
-    if (mode === "contextual") {
-      setNiche(examples.contextual.niche);
-      setTheme(examples.contextual.theme);
-      setContext(examples.contextual.context);
-      setImageAnalysis(examples.contextual.image);
-      return;
-    }
+    try {
+      if (mode === "contextual" && !imagePreview) {
+        throw new Error(
+          tx(
+            language,
+            "Envie a imagem contextual antes de usar o preenchimento automatico.",
+            "Upload the contextual image before using autofill."
+          )
+        );
+      }
 
-    setNiche(examples.product.niche);
-    setTheme(examples.product.theme);
-    setProductBackground(examples.product.background);
-    setProductDetails(examples.product.details);
+      if (mode === "produto" && productImages.length === 0) {
+        throw new Error(
+          tx(
+            language,
+            "Envie pelo menos uma imagem do produto antes de usar o preenchimento automatico.",
+            "Upload at least one product image before using autofill."
+          )
+        );
+      }
+
+      const response = await fetchWithFreshSession("/api/autofill-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          carouselCount,
+          description,
+          image: mode === "contextual" ? imagePreview : null,
+          language,
+          mode,
+          productImages: mode === "produto" ? productImages : [],
+          visualFormat
+        })
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            tx(language, "Nao foi possivel preencher automaticamente.", "Could not autofill the fields.")
+        );
+      }
+
+      const autofill = data as AutofillResult;
+      setNiche(autofill.niche);
+      setTheme(autofill.theme);
+
+      if (mode === "criativo") {
+        if (visualFormat === "carrossel") {
+          setCarouselDetails(() =>
+            Array.from(
+              { length: carouselCount },
+              (_, index) => autofill.carouselDetails[index] || ""
+            )
+          );
+        } else {
+          setSingleImageDetail(autofill.singleImageDetail);
+        }
+      }
+
+      if (mode === "contextual") {
+        setContext(autofill.context);
+        setImageAnalysis(autofill.imageAnalysis);
+      }
+
+      if (mode === "produto") {
+        setProductBackground(autofill.productBackground);
+        setProductDetails(autofill.productDetails);
+      }
+
+      setIsAutofillModalOpen(false);
+    } catch (caughtError) {
+      throw caughtError instanceof Error
+        ? caughtError
+        : new Error(
+            tx(language, "Erro inesperado ao preencher.", "Unexpected autofill error.")
+          );
+    } finally {
+      setIsAutofilling(false);
+    }
   }
 
   function onImageChange(file?: File) {
@@ -1224,8 +1276,14 @@ export default function Home() {
             </div>
 
             <div className="button-row">
-              <button className="secondary-button" type="button" onClick={fillExample}>
-                {tx(language, "Exemplo", "Example")}
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setIsAutofillModalOpen(true)}
+                disabled={isAutofilling}
+              >
+                <Sparkles size={16} />
+                {tx(language, "Preenchimento automatico", "Autofill")}
               </button>
               <button className="primary-button" type="submit" disabled={isLoading}>
                 <ArrowRight size={18} />
@@ -1233,6 +1291,14 @@ export default function Home() {
               </button>
             </div>
           </form>
+              {isAutofillModalOpen && (
+                <AutofillModal
+                  language={language}
+                  isSubmitting={isAutofilling}
+                  onClose={() => setIsAutofillModalOpen(false)}
+                  onConfirm={autofillPostFields}
+                />
+              )}
             </aside>
 
             <section className="results-area">
@@ -1858,6 +1924,127 @@ function SavedPostScheduler({
           selectedAccountId={socialAccountId}
         />
       )}
+    </div>
+  );
+}
+
+function AutofillModal({
+  language,
+  isSubmitting = false,
+  onClose,
+  onConfirm
+}: {
+  language: Language;
+  isSubmitting?: boolean;
+  onClose: () => void;
+  onConfirm: (description: string) => void | Promise<void>;
+}) {
+  const [description, setDescription] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  async function confirmAutofill() {
+    if (isSubmitting) {
+      return;
+    }
+
+    const trimmedDescription = description.trim();
+    setLocalError(null);
+
+    if (trimmedDescription.length < 8) {
+      setLocalError(
+        tx(
+          language,
+          "Descreva brevemente o post que voce quer criar.",
+          "Briefly describe the post you want to create."
+        )
+      );
+      return;
+    }
+
+    try {
+      await onConfirm(trimmedDescription);
+    } catch (caughtError) {
+      setLocalError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : tx(
+              language,
+              "Nao foi possivel preencher automaticamente.",
+              "Could not autofill the fields."
+            )
+      );
+    }
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={isSubmitting ? undefined : onClose}
+    >
+      <div
+        aria-modal="true"
+        className="schedule-modal autofill-modal"
+        role="dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="schedule-modal-header">
+          <div>
+            <p className="eyebrow">{tx(language, "IA assistida", "AI assisted")}</p>
+            <h3>{tx(language, "Preenchimento automatico", "Autofill")}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={tx(language, "Fechar", "Close")}
+            disabled={isSubmitting}
+          >
+            X
+          </button>
+        </div>
+
+        <div className="schedule-modal-fields">
+          <label>
+            <span>{tx(language, "Descricao breve", "Brief description")}</span>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder={tx(
+                language,
+                "Ex: Quero um post para uma clinica de estetica falando sobre limpeza de pele antes do verao, com imagem clean e premium.",
+                "Ex: I want a post for a skincare clinic about facial cleansing before summer, with a clean premium image."
+              )}
+              rows={5}
+              disabled={isSubmitting}
+              autoFocus
+            />
+          </label>
+        </div>
+
+        {localError && <p className="error-message">{localError}</p>}
+
+        <div className="schedule-modal-actions">
+          <button
+            className="modal-cancel-button"
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            {tx(language, "Cancelar", "Cancel")}
+          </button>
+          <button
+            className="schedule-button"
+            type="button"
+            onClick={confirmAutofill}
+            disabled={isSubmitting}
+          >
+            <Sparkles size={16} />
+            {isSubmitting
+              ? tx(language, "Preenchendo...", "Filling...")
+              : tx(language, "Preencher campos", "Fill fields")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

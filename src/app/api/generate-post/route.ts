@@ -8,12 +8,14 @@ import { getPlan, plans } from "@/lib/plans";
 import { uploadPostImages } from "@/lib/post-images";
 import { checkRateLimit } from "@/lib/rate-limit";
 import type { PoolClient, Pool } from "pg";
+import type Stripe from "stripe";
 import {
   generatedPostSchema,
   generatedPostZodSchema,
   postInputSchema,
   type PostInput
 } from "@/lib/post-schema";
+import { getStripe } from "@/lib/stripe";
 import { getUserFromRequest } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
@@ -21,6 +23,18 @@ export const runtime = "nodejs";
 type QueryableDatabase = Pick<Pool | PoolClient, "query">;
 
 const SIMPLE_POST_CREDIT_COST = 2;
+const ACTIVE_SUBSCRIPTION_STATUSES = ["active", "trialing"] as const;
+
+type Profile = {
+  id: string;
+  email: string;
+  plan: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  subscription_status: string | null;
+  credits_limit: number;
+};
+
 type TextOnlyPostInput =
   | Extract<PostInput, { modo: "criativo" }>
   | Omit<Extract<PostInput, { modo: "contextual" }>, "imagem_do_usuario">
@@ -583,7 +597,7 @@ async function assertGenerationAllowed({
   metadata: Record<string, unknown>;
   userId: string;
 }) {
-  const profile = await ensureProfile({
+  let profile = await ensureProfile({
     database,
     email,
     metadata,
@@ -591,7 +605,17 @@ async function assertGenerationAllowed({
     userId
   });
 
-  if (!["active", "trialing"].includes(profile.subscription_status || "")) {
+  if (!isActiveSubscriptionStatus(profile.subscription_status)) {
+    profile =
+      (await syncActiveStripeSubscription({
+        database,
+        email,
+        profile,
+        userId
+      })) || profile;
+  }
+
+  if (!isActiveSubscriptionStatus(profile.subscription_status)) {
     throw new Error("Assinatura inativa. Atualize o pagamento para gerar posts.");
   }
 
@@ -671,27 +695,23 @@ async function ensureProfile({
   userId: string;
 }) {
   const currentProfile = await database.query(
-    `select id, email, plan, subscription_status, credits_limit
+    `select id, email, plan, stripe_customer_id, stripe_subscription_id,
+            subscription_status, credits_limit
      from profiles
      where id = $1`,
     [userId]
   );
 
   if (currentProfile.rowCount && currentProfile.rows[0]) {
-    return currentProfile.rows[0] as {
-      id: string;
-      email: string;
-      plan: string;
-      subscription_status: string | null;
-      credits_limit: number;
-    };
+    return currentProfile.rows[0] as Profile;
   }
 
   const plan = getPlan(planId) || plans[1];
   const insertedProfile = await database.query(
     `insert into profiles (id, email, full_name, document, phone, plan, credits_limit)
      values ($1, $2, $3, $4, $5, $6, $7)
-     returning id, email, plan, subscription_status, credits_limit`,
+     returning id, email, plan, stripe_customer_id, stripe_subscription_id,
+               subscription_status, credits_limit`,
     [
       userId,
       email,
@@ -703,13 +723,126 @@ async function ensureProfile({
     ]
   );
 
-  return insertedProfile.rows[0] as {
-    id: string;
-    email: string;
-    plan: string;
-    subscription_status: string | null;
-    credits_limit: number;
-  };
+  return insertedProfile.rows[0] as Profile;
+}
+
+async function syncActiveStripeSubscription({
+  database,
+  email,
+  profile,
+  userId
+}: {
+  database: QueryableDatabase;
+  email: string;
+  profile: Profile;
+  userId: string;
+}) {
+  try {
+    const stripe = getStripe();
+    const subscription =
+      (await getActiveSubscriptionById(stripe, profile.stripe_subscription_id)) ||
+      (await findActiveSubscriptionByEmail(stripe, email || profile.email));
+
+    if (!subscription) {
+      return null;
+    }
+
+    const plan = getPlanFromSubscription(subscription) || getPlan(profile.plan) || plans[1];
+    const updatedProfile = await database.query(
+      `update profiles
+       set stripe_customer_id = $2,
+           stripe_subscription_id = $3,
+           subscription_status = $4,
+           plan = $5,
+           credits_limit = $6
+       where id = $1
+       returning id, email, plan, stripe_customer_id, stripe_subscription_id,
+                 subscription_status, credits_limit`,
+      [
+        userId,
+        getStripeId(subscription.customer),
+        subscription.id,
+        subscription.status,
+        plan.id,
+        plan.creditLimit
+      ]
+    );
+
+    return (updatedProfile.rows[0] as Profile | undefined) || null;
+  } catch (error) {
+    console.warn("Nao foi possivel sincronizar assinatura Stripe", {
+      error: error instanceof Error ? error.message : "Erro desconhecido",
+      userId
+    });
+    return null;
+  }
+}
+
+async function getActiveSubscriptionById(
+  stripe: Stripe,
+  subscriptionId: string | null
+) {
+  if (!subscriptionId) {
+    return null;
+  }
+
+  try {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    return isActiveSubscriptionStatus(subscription.status) ? subscription : null;
+  } catch {
+    return null;
+  }
+}
+
+async function findActiveSubscriptionByEmail(stripe: Stripe, email: string) {
+  if (!email) {
+    return null;
+  }
+
+  const customers = await stripe.customers.list({ email, limit: 10 });
+
+  for (const customer of customers.data) {
+    const subscriptions = await stripe.subscriptions.list({
+      customer: customer.id,
+      limit: 100,
+      status: "all"
+    });
+    const activeSubscription = subscriptions.data.find((subscription) =>
+      isActiveSubscriptionStatus(subscription.status)
+    );
+
+    if (activeSubscription) {
+      return activeSubscription;
+    }
+  }
+
+  return null;
+}
+
+function getPlanFromSubscription(subscription: Stripe.Subscription) {
+  const priceId = subscription.items.data[0]?.price.id;
+  return plans.find((plan) => process.env[plan.stripeEnvKey] === priceId);
+}
+
+function isActiveSubscriptionStatus(status: string | null | undefined) {
+  return ACTIVE_SUBSCRIPTION_STATUSES.includes(
+    status as (typeof ACTIVE_SUBSCRIPTION_STATUSES)[number]
+  );
+}
+
+function getStripeId(
+  value:
+    | string
+    | Stripe.Customer
+    | Stripe.DeletedCustomer
+    | Stripe.Subscription
+    | null
+) {
+  if (!value) {
+    return null;
+  }
+
+  return typeof value === "string" ? value : value.id;
 }
 
 async function reserveCredits({
